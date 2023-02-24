@@ -9,3 +9,26 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model users {
+  number       String   @id
+  name         String?
+  email        String?
+  timezone     String?
+  mostRecent   DateTime @db.Date
+}
+
+model messages {
+  id             Int       @id @default(autoincrement())
+  content        String?
+  media_url      String?
+  is_outbound    Boolean?
+  date           DateTime  @db.Date
+  number         String?
+  was_downgraded Boolean?  @default(false)
+  tokens         Int?
+  model          String?
+  keywords       String[]
+  type           String?
+  relevance       Int?
+}

@@ -75,8 +75,8 @@ function log_message(message) {
 // ======================================================================================
 // CRON
 // RUNS EVERY 5 MINUTES
-const job = new cron_1.default.CronJob('*/5 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('Current time:');
+const job = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('CRON:');
 }));
 job.start();
 // ======================================================================================

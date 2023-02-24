@@ -1,5 +1,5 @@
 require('dotenv').config()
-import { Prisma, PrismaClient } from '@prisma/client'
+import { messages, users, Prisma, PrismaClient } from '@prisma/client'
 import { Client, ClientConfig } from 'pg'
 import Sendblue from 'sendblue'
 import axios from 'axios'
@@ -21,7 +21,6 @@ const signup_link = 'https://tally.so/r/nWJNXQ'
 const subscribe_link = 'https://ianwatts.site/robome.html'
 const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo'
 const admin_numbers = ['+13104974985', '+12015190240']    // Watts, Pulice
-
 
 // OpenAI config
 const configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
@@ -77,7 +76,7 @@ interface Message {
   was_downgraded?: boolean
   tokens?: number
   send_style?: string
-  message_type?: string
+  message_type?: string    // response, reach-out, query
   group_id?: string
 }
 async function log_message(message: Message) {
@@ -93,8 +92,8 @@ async function log_message(message: Message) {
 
 // CRON
 // RUNS EVERY 5 MINUTES
-const job = new cron.CronJob('*/5 * * * *', async () => {
-  console.log('Current time:')
+const job = new cron.CronJob('0 */1 * * *', async () => {
+  console.log('CRON:')
 })
 job.start()
 
@@ -162,8 +161,6 @@ async function send_message(message: Message, test?: boolean) {
 }
 
 // ==========================ANALYZE MESSAGE=========================
-
-let help_message = ` - for a generative image, say "image of <description>" (ex. "image of ur mom")\n - text us personally 🙅🤖 at (310) 497-4985 (Ian) or (310) 922-1006 (Alec) to help out or get feedback (GIVE US ALL YOUR FEEDBACK)`
 
 async function analyze_message(message: Message, accountEmail?: string) {
   if (!message.content || !message.number) { return }
