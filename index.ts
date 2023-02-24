@@ -18,10 +18,10 @@ const sendblue_test = new Sendblue(process.env.SENDBLUE_TEST_API_KEY!, process.e
 const signup_link = 'https://tally.so/r/nWJNXQ'
 
 //SUBCRIPTION PAYMENT 
-/*const subscribe_link = 'https://ianwatts.site/robome.html'
+const subscribe_link = 'https://ianwatts.site/robome.html'
 const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo'
-const admin_numbers = ['+13104974985', '+13109221006']    // Ian, Alec
-*/
+const admin_numbers = ['+13104974985', '+12015190240']    // Watts, Pulice
+
 
 // OpenAI config
 const configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
@@ -102,8 +102,10 @@ job.start()
 // ========================================ROUTES========================================
 // ======================================================================================
 
-app.post('/webhook-tally', async (req: express.Request, res: express.Response) => {
+app.post('/signup-form', async (req: express.Request, res: express.Response) => {
   try {
+    console.log(JSON.stringify(req.body))
+    
     let fields = req.body.data.fields
     res.status(200).end()
     let user: User = { number: fields[0].value, name: fields[1].value, gender: fields[2].value, birthdate: new Date(fields[8].value), location: fields[9].value }  // Tally webhooks data formatting is a nightmare
@@ -118,10 +120,10 @@ app.post('/webhook-tally', async (req: express.Request, res: express.Response) =
     send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() })
     console.log('form received ' + user.number)
   } catch (e) {
-    console.log(e)
+    console.log(` ! ERROR ${e}`)
     res.status(500).end()
   }
-});
+})
 
 app.post('/message', (req: express.Request, res: express.Response) => {
   try {
@@ -182,22 +184,23 @@ async function analyze_message(message: Message, accountEmail?: string) {
 
 async function get_context(message: Message) {
 
-  const last10Messages = await prisma.messages.findMany({
-    where: {
-      number: message.number,
-      // message_type: { not: { is: "query" } }  // TODO is this right lol
-    },
-    orderBy: { id: 'desc' },
-    take: 10
-  });
+  // const last10Messages = await prisma.messages.findMany({
+  //   where: {
+  //     number: message.number,
+  //     // message_type: { not: { is: "query" } }  // TODO is this right lol
+  //   },
+  //   orderBy: { id: 'desc' }, take: 10
+  // })
 
-  const dateFormat = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }
-  const last10MessagesString = last10Messages.map((message: messages) => {
-    message.is_outbound ? `\n[${message.date!.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}] Journal: ${message.content}` : `\n[${message.date!.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}]Human: ${message.content}`
-  }).reverse().join('')
+  // const dateFormat = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }
+  // const last10MessagesString = last10Messages.map((message: messages) => {
+  //   message.is_outbound ? `\n[${message.date!.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}] Journal: ${message.content}` : `\n[${message.date!.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}]Human: ${message.content}`
+  // }).reverse().join('')
 
-  console.log(last10MessagesString)
-  return last10MessagesString
+  // console.log(last10MessagesString)
+  // return last10MessagesString
+
+  return 'need to fix last10Messages'
 }
 
 const getUser = async (message: Message) => await prisma.users.findFirst({ where: { number: message.number }, })
@@ -218,7 +221,6 @@ Do not provide or mention links to the internet.`
 
   console.log(prompt)
   respond_text(message, prompt, test)
-  console.log(await time_since_message(message) + ' format_text')
 }
 
 // ==========================================
