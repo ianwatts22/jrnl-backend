@@ -9,18 +9,10 @@ import bodyParser from 'body-parser'
 import { Configuration, OpenAIApi } from "openai"
 import cron from 'cron'
 import os from 'os'
-import * as chrono from 'chrono-node'
-import { PineconeClient } from "@pinecone-database/pinecone";
-
-
 
 const app = express()
 const sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!)
 const sendblue_test = new Sendblue(process.env.SENDBLUE_TEST_API_KEY!, process.env.SENDBLUE_TEST_API_SECRET!)
-
-const pinecone = new PineconeClient();
-// ! initially had a top-level await but it was causing issues w/ TS, should figure out top-level await
-pinecone.init({ environment: "YOUR_ENVIRONMENT", apiKey: process.env.PINECONE_API_KEY! })
 
 // OpenAI config
 const configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
@@ -52,26 +44,34 @@ client.connect();
 // * USER Profile 
 interface User {
   number: string
-  name?: string
+  name: string
   email?: string
   timezone: string
   most_recent?: Date
+  // focus?: string
+  // profile?: string
+  // past?: string
 }
-async function log_user(user: User) { await prisma.users.create({ data: user }) }
+async function log_user(user: User) { 
+  await prisma.users.create({ data: user })
+  send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() })
+}
 
 // * MESSAGES
 interface Message {
+  // Sendblue data
   content?: string
   media_url?: string
   is_outbound?: boolean
   date?: Date
   number?: string
   was_downgraded?: boolean
-  tokens?: number
   send_style?: string
+  group_id?: number
+  // our data
+  tokens?: number
   keywords?: string[]
-  type?: string    // response, reach-out, query
-  group_id?: string
+  type?: string           // response, reach-out, query
   relevance?: number
 }
 
@@ -81,7 +81,7 @@ async function log_message(message: Message) {
   if (message.tokens && message.content) { message.tokens = Math.round(message.content.split(' ').length * 4 / 3) }
 
 
-  // await prisma.messages.create({ data: message }) // ! wtf is wrong here?
+  await prisma.messages.create({ data: message }) // ! wtf is wrong here?
   console.log(`${Date.now() - t0}ms - log_message`)
 }
 
@@ -100,16 +100,15 @@ app.post('/signup-form', async (req: express.Request, res: express.Response) => 
 
     let existing_user = await get_user(user.number)
     if (!existing_user) {
-      send_message({ content: `Welcome to jrnl, your conversational journal buddy. Consistent journaling is hard, so we're lowering the barrier. Text us when you want,  Add the contact card and pin me for max utility.`, media_url: `https://ianwatts.site/assets/Robome.vcf`, number: user.number })
+      send_message({ content: `Welcome to jrnl, your conversational journal buddy. Reply to my questions or text me when you want. Add the contact card and pin me for max utility.`, media_url: `https://ianwatts22.github.io/jrnl/assets/jrnl.vcf`, number: user.number })
     }
     log_user(user)
 
-    send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() })
     const t1 = Date.now()
     console.log(`${t1 - t0}ms - /signup-form: ${user.name} ${user.number}`)
   } catch (e) {
-    error_alert(e)
     res.status(500).end()
+    error_alert(e)
   }
 })
 
@@ -124,9 +123,8 @@ app.post('/message', (req: express.Request, res: express.Response) => {
     const t1 = Date.now()
     console.log(`${t1 - t0}ms - /message: (${message.number}${message.content}`)
   } catch (e) {
-    console.log(e)
-    send_message({ content: `ERROR: ${e} ${req.body.error_message}`, number: admin_numbers.toString() })
     res.status(500).end()
+    error_alert(e)
   }
 })
 
@@ -134,32 +132,33 @@ app.post('/message', (req: express.Request, res: express.Response) => {
 // ========================================TESTING=======================================
 // ======================================================================================
 
-// CRON
-// RUNS EVERY 5 MINUTES
-const job = new cron.CronJob('0 */1 * * *', async () => {
-  console.log('CRON:')
-})
-job.start()
+// embeddings
+// import { PineconeClient } from '@pinecone-database/pinecone'
+// const pinecone = new PineconeClient();
+// ! initially had a top-level await but it was causing issues w/ TS, should figure out top-level await
+// pinecone.init({ environment: "YOUR_ENVIRONMENT", apiKey: process.env.PINECONE_API_KEY! })
+// async function embedding_test() {
+//   const response = await openai.createEmbedding({
+//     model: "text-embedding-ada-002",
+//     input: "The food was delicious and the waiter...",
+//   });
+// }
 
-async function test() {
-  const response = await openai.createEmbedding({
-    model: "text-embedding-ada-002",
-    input: "The food was delicious and the waiter...",
-  });
-}
+// chrono is NLP that turns relative dates absolute
+// import * as chrono from 'chrono-node'
+// test_chrono()
+// async function test_chrono() {
+//   const parsed_date = chrono.parseDate('july')
+//   console.log(parsed_date)
+// }
 
-test_chrono()
-async function test_chrono() {
-  const parsed_date = chrono.parseDate('july')
-  console.log(parsed_date)
-}
-
+// GPT Prisma query generation
 async function test_openAI_query(message: string) {
   // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
   const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
   Prompt: ${message}
   t0, t1: `
-  
+
   const query_prompt = `// You are a super-intelligent AI creating queries. Below is the shape of data for a message. Create a single Prisma ORM query based off the following prompt. Finish after the "const where" statement
   model messages {
     content        String?
@@ -182,7 +181,7 @@ async function test_openAI_query(message: string) {
 
   try {
     const extract_dates = await openai.createCompletion({ model: 'text-davinci-003', prompt: extract_dates_prompt, max_tokens: 64, temperature: 0.3 })
-    
+
     const query_text = await openai.createCompletion({
       model: 'code-davinci-002', prompt: query_prompt, max_tokens: 128,
       temperature: 0.5, frequency_penalty: 0, presence_penalty: 0,
@@ -191,25 +190,33 @@ async function test_openAI_query(message: string) {
     const where: Object = JSON.parse(query_text.data.choices[0].text!)  //turn string into object to pass into Prisma query
 
     const query = await prisma.messages.findMany({ where: where, orderBy: { relevance: "desc", }, take: 10, })
-  } catch (e) { error_alert(e) }
+  } catch(e) { error_alert(e) }
 }
 
 // ======================================================================================
 // ========================================FUNCTIONS========================================
 // ======================================================================================
 
-async function send_message(message: Message, test?: boolean) {
-  message.date = new Date()
-  message.is_outbound = true
+// CRON
+// RUNS EVERY 5 MINUTES
+const job = new cron.CronJob('0 */1 * * *', async () => {
+  console.log('CRON:')
+})
+job.start()
+
+async function send_message(message: Message = { date: new Date(), is_outbound: true }, test?: boolean) {
+  const t0 = Date.now()
   let response
-  // if (message.group_id)
-  if (test) {
-    response = await sendblue_test.sendMessage({ content: message.content, number: message.number!, send_style: message.send_style, media_url: message.media_url })
-  } else {
-    response = await sendblue.sendMessage({ content: message.content, number: message.number!, send_style: message.send_style, media_url: message.media_url }) // TODO add status_callback
-  }
-  log_message(message)
-  console.log(``)
+  try {
+    if (test) {
+      response = await sendblue_test.sendMessage({ content: message.content, number: message.number!, send_style: message.send_style, media_url: message.media_url })
+    } else {
+      response = await sendblue.sendMessage({ content: message.content, number: message.number!, send_style: message.send_style, media_url: message.media_url }) // TODO add status_callback
+    }
+    log_message(message)
+    const t1 = Date.now()
+    console.log(`${t1 - t0}ms - send_message`)
+  } catch(e) { error_alert(e) }
 }
 
 // ==========================ANALYZE MESSAGE=========================

@@ -11,21 +11,21 @@ datasource db {
 }
 
 model users {
-  number     String    @id
-  name       String?
-  email      String?
-  timezone   String?
+  number      String    @id
+  name        String?
+  email       String?
+  timezone    String?
   most_recent DateTime? @db.Date
 }
 
 model messages {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   content        String?
   media_url      String?
   is_outbound    Boolean?
-  date           DateTime @db.Date
+  date           DateTime? @db.Date
   number         String?
-  was_downgraded Boolean? @default(false)
+  was_downgraded Boolean?  @default(false)
   tokens         Int?
   send_style     String?
   keywords       String[]

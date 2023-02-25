@@ -1,27 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -45,20 +22,9 @@ const body_parser_1 = __importDefault(require("body-parser"));
 const openai_1 = require("openai");
 const cron_1 = __importDefault(require("cron"));
 const os_1 = __importDefault(require("os"));
-const chrono = __importStar(require("chrono-node"));
-const pinecone_1 = require("@pinecone-database/pinecone");
-const pinecone = new pinecone_1.PineconeClient();
-pinecone.init({
-    environment: "YOUR_ENVIRONMENT",
-    apiKey: "YOUR_API_KEY",
-});
 const app = (0, express_1.default)();
 const sendblue = new sendblue_1.default(process.env.SENDBLUE_API_KEY, process.env.SENDBLUE_API_SECRET);
 const sendblue_test = new sendblue_1.default(process.env.SENDBLUE_TEST_API_KEY, process.env.SENDBLUE_TEST_API_SECRET);
-const signup_link = 'https://tally.so/r/w4Q7kX';
-const subscribe_link = 'https://ianwatts.site/robome.html'; //SUBCRIPTION PAYMENT
-const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo';
-const admin_numbers = ['+13104974985', '+12015190240']; // Watts, Pulice
 // OpenAI config
 const configuration = new openai_1.Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, });
 const openai = new openai_1.OpenAIApi(configuration);
@@ -83,7 +49,10 @@ const client = new pg_1.Client(clientConfig);
 const prisma = new client_1.PrismaClient();
 client.connect();
 function log_user(user) {
-    return __awaiter(this, void 0, void 0, function* () { yield prisma.users.create({ data: user }); });
+    return __awaiter(this, void 0, void 0, function* () {
+        yield prisma.users.create({ data: user });
+        send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() });
+    });
 }
 function log_message(message) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -92,7 +61,7 @@ function log_message(message) {
         if (message.tokens && message.content) {
             message.tokens = Math.round(message.content.split(' ').length * 4 / 3);
         }
-        // await prisma.messages.create({ data: message }) // ! wtf is wrong here?
+        yield prisma.messages.create({ data: message }); // ! wtf is wrong here?
         console.log(`${Date.now() - t0}ms - log_message`);
     });
 }
@@ -108,16 +77,15 @@ app.post('/signup-form', (req, res) => __awaiter(void 0, void 0, void 0, functio
         let user = { name: fields[0].value, number: fields[1].value, timezone: fields[2].value.options.find((option) => option.id === fields[2].value).text }; // Tally webhooks data formatting is a nightmare
         let existing_user = yield get_user(user.number);
         if (!existing_user) {
-            send_message({ content: `Welcome to jrnl, your conversational journal buddy. Consistent journaling is hard, so we're lowering the barrier. Text us when you want,  Add the contact card and pin me for max utility.`, media_url: `https://ianwatts.site/assets/Robome.vcf`, number: user.number });
+            send_message({ content: `Welcome to jrnl, your conversational journal buddy. Reply to my questions or text me when you want. Add the contact card and pin me for max utility.`, media_url: `https://ianwatts22.github.io/jrnl/assets/jrnl.vcf`, number: user.number });
         }
         log_user(user);
-        send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() });
         const t1 = Date.now();
         console.log(`${t1 - t0}ms - /signup-form: ${user.name} ${user.number}`);
     }
     catch (e) {
-        error_alert(e);
         res.status(500).end();
+        error_alert(e);
     }
 }));
 app.post('/message', (req, res) => {
@@ -130,35 +98,32 @@ app.post('/message', (req, res) => {
         console.log(`${t1 - t0}ms - /message: (${message.number}${message.content}`);
     }
     catch (e) {
-        console.log(e);
-        send_message({ content: `ERROR: ${e} ${req.body.error_message}`, number: admin_numbers.toString() });
         res.status(500).end();
+        error_alert(e);
     }
 });
 // ======================================================================================
 // ========================================TESTING=======================================
 // ======================================================================================
-// CRON
-// RUNS EVERY 5 MINUTES
-const job = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('CRON:');
-}));
-job.start();
-function test() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield openai.createEmbedding({
-            model: "text-embedding-ada-002",
-            input: "The food was delicious and the waiter...",
-        });
-    });
-}
-test_chrono();
-function test_chrono() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const parsed_date = chrono.parseDate('july');
-        console.log(parsed_date);
-    });
-}
+// embeddings
+// import { PineconeClient } from '@pinecone-database/pinecone'
+// const pinecone = new PineconeClient();
+// ! initially had a top-level await but it was causing issues w/ TS, should figure out top-level await
+// pinecone.init({ environment: "YOUR_ENVIRONMENT", apiKey: process.env.PINECONE_API_KEY! })
+// async function embedding_test() {
+//   const response = await openai.createEmbedding({
+//     model: "text-embedding-ada-002",
+//     input: "The food was delicious and the waiter...",
+//   });
+// }
+// chrono is NLP that turns relative dates absolute
+// import * as chrono from 'chrono-node'
+// test_chrono()
+// async function test_chrono() {
+//   const parsed_date = chrono.parseDate('july')
+//   console.log(parsed_date)
+// }
+// GPT Prisma query generation
 function test_openAI_query(message) {
     return __awaiter(this, void 0, void 0, function* () {
         // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
@@ -202,20 +167,30 @@ function test_openAI_query(message) {
 // ======================================================================================
 // ========================================FUNCTIONS========================================
 // ======================================================================================
-function send_message(message, test) {
+// CRON
+// RUNS EVERY 5 MINUTES
+const job = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('CRON:');
+}));
+job.start();
+function send_message(message = { date: new Date(), is_outbound: true }, test) {
     return __awaiter(this, void 0, void 0, function* () {
-        message.date = new Date();
-        message.is_outbound = true;
+        const t0 = Date.now();
         let response;
-        // if (message.group_id)
-        if (test) {
-            response = yield sendblue_test.sendMessage({ content: message.content, number: message.number, send_style: message.send_style, media_url: message.media_url });
+        try {
+            if (test) {
+                response = yield sendblue_test.sendMessage({ content: message.content, number: message.number, send_style: message.send_style, media_url: message.media_url });
+            }
+            else {
+                response = yield sendblue.sendMessage({ content: message.content, number: message.number, send_style: message.send_style, media_url: message.media_url }); // TODO add status_callback
+            }
+            log_message(message);
+            const t1 = Date.now();
+            console.log(`${t1 - t0}ms - send_message`);
         }
-        else {
-            response = yield sendblue.sendMessage({ content: message.content, number: message.number, send_style: message.send_style, media_url: message.media_url }); // TODO add status_callback
+        catch (e) {
+            error_alert(e);
         }
-        log_message(message);
-        console.log(``);
     });
 }
 // ==========================ANALYZE MESSAGE=========================
@@ -231,8 +206,8 @@ function analyze_message(message, accountEmail) {
         }
         const content_lc = message.content.toLowerCase();
         // feedback, help (FAQ->directions->support), image, logging, 
-        if (content_lc.includes('admin message\n----') && admin_numbers.includes(message.number)) {
-            send_message({ content: message.content.split('----').pop(), number: message.number }, test);
+        if (content_lc.includes('admin message\n###') && admin_numbers.includes(message.number)) {
+            send_message({ content: message.content.split('###').pop(), number: message.number }, test);
         }
         else {
             format_text(message, test);
@@ -306,6 +281,10 @@ function respond_text(message, prompt, test) {
     });
 }
 let send_style_options = new Set(["celebration", "shooting_star", "fireworks", "lasers", "love", "confetti", "balloons", "spotlight", "echo", "invisible", "gentle", "loud", "slam"]);
+const signup_link = 'https://tally.so/r/w4Q7kX';
+const subscribe_link = 'https://ianwatts.site/robome.html'; //SUBCRIPTION PAYMENT
+const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo';
+const admin_numbers = ['+13104974985', '+12015190240']; // Watts, Pulice
 // ====================================ADMIN STUFF==================================
 function error_alert(error) {
     return __awaiter(this, void 0, void 0, function* () {
