@@ -9,18 +9,18 @@ import bodyParser from 'body-parser'
 import { Configuration, OpenAIApi } from "openai"
 import cron from 'cron'
 import os from 'os'
+import * as chrono from 'chrono-node'
+import { PineconeClient } from "@pinecone-database/pinecone";
+
+
 
 const app = express()
 const sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!)
 const sendblue_test = new Sendblue(process.env.SENDBLUE_TEST_API_KEY!, process.env.SENDBLUE_TEST_API_SECRET!)
 
-//domain for signup --> UPDATE 
-const signup_link = 'https://tally.so/r/nWJNXQ'
-
-//SUBCRIPTION PAYMENT 
-const subscribe_link = 'https://ianwatts.site/robome.html'
-const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo'
-const admin_numbers = ['+13104974985', '+12015190240']    // Watts, Pulice
+const pinecone = new PineconeClient();
+// ! initially had a top-level await but it was causing issues w/ TS, should figure out top-level await
+pinecone.init({ environment: "YOUR_ENVIRONMENT", apiKey: process.env.PINECONE_API_KEY! })
 
 // OpenAI config
 const configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
@@ -38,32 +38,25 @@ app.use(express.urlencoded({ extended: true }))
 app.use(bodyParser.json())
 app.use(morgan('dev'))
 // End Connects system to internet DON'T TOUCH
+
+// ========================================================================================
 // ========================================DATABASE========================================
+// ========================================================================================
 // PostgreSQL db
 let clientConfig: ClientConfig  // need to pass ssl: true for external access
-if (process.env.PGHOST!.includes('render')) {
-  clientConfig = { user: process.env.PGUSER, host: process.env.PGHOST, database: process.env.PGDATABASE, password: process.env.PGPASSWORD, port: Number(process.env.PGPORT), ssl: true }
-} else {
-  clientConfig = { user: process.env.PGUSER, host: process.env.PGHOST, database: process.env.PGDATABASE, password: process.env.PGPASSWORD, port: Number(process.env.PGPORT) }
-}
+process.env.PGHOST!.includes('render') ? clientConfig = { user: process.env.PGUSER, host: process.env.PGHOST, database: process.env.PGDATABASE, password: process.env.PGPASSWORD, port: Number(process.env.PGPORT), ssl: true } : clientConfig = { user: process.env.PGUSER, host: process.env.PGHOST, database: process.env.PGDATABASE, password: process.env.PGPASSWORD, port: Number(process.env.PGPORT) }
 const client = new Client(clientConfig);
 const prisma = new PrismaClient()
 client.connect();
 
 // * USER Profile 
-// TO UPDATE 
 interface User {
   number: string
   name?: string
-  gender?: string
-  birthdate?: Date
-  location?: string
-  bio?: string
-  subscription?: string
-  // email?: string
+  email?: string
+  timezone: string
+  most_recent?: Date
 }
-
-//CREATE USER PROFILE 
 async function log_user(user: User) { await prisma.users.create({ data: user }) }
 
 // * MESSAGES
@@ -76,26 +69,21 @@ interface Message {
   was_downgraded?: boolean
   tokens?: number
   send_style?: string
-  message_type?: string    // response, reach-out, query
+  keywords?: string[]
+  type?: string    // response, reach-out, query
   group_id?: string
+  relevance?: number
 }
+
 async function log_message(message: Message) {
+  const t0 = Date.now()
   // TODO: replace with tokenizer? (find in Readme)
   if (message.tokens && message.content) { message.tokens = Math.round(message.content.split(' ').length * 4 / 3) }
 
-  await prisma.messages.create({ data: message });
+
+  // await prisma.messages.create({ data: message }) // ! wtf is wrong here?
+  console.log(`${Date.now() - t0}ms - log_message`)
 }
-
-// ======================================================================================
-// ========================================TESTING=======================================
-// ======================================================================================
-
-// CRON
-// RUNS EVERY 5 MINUTES
-const job = new cron.CronJob('0 */1 * * *', async () => {
-  console.log('CRON:')
-})
-job.start()
 
 // ======================================================================================
 // ========================================ROUTES========================================
@@ -103,23 +91,24 @@ job.start()
 
 app.post('/signup-form', async (req: express.Request, res: express.Response) => {
   try {
+    const t0 = Date.now()
     console.log(JSON.stringify(req.body))
-    
+
     let fields = req.body.data.fields
     res.status(200).end()
-    let user: User = { number: fields[0].value, name: fields[1].value, gender: fields[2].value, birthdate: new Date(fields[8].value), location: fields[9].value }  // Tally webhooks data formatting is a nightmare
+    let user: User = { name: fields[0].value, number: fields[1].value, timezone: fields[2].value.options.find((option: any) => option.id === fields[2].value).text }  // Tally webhooks data formatting is a nightmare
 
-    let existingUser = await prisma.users.findFirst({ where: { number: user.number } })
-    if (!existingUser) {
-      send_message({ content: `Add the contact card and pin me for max utility.`, media_url: `https://ianwatts.site/assets/Robome.vcf`, number: user.number })
-      setTimeout(() => { send_message({ content: help_message, number: user.number }) }, 5000)
+    let existing_user = await get_user(user.number)
+    if (!existing_user) {
+      send_message({ content: `Welcome to jrnl, your conversational journal buddy. Consistent journaling is hard, so we're lowering the barrier. Text us when you want,  Add the contact card and pin me for max utility.`, media_url: `https://ianwatts.site/assets/Robome.vcf`, number: user.number })
     }
     log_user(user)
 
     send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() })
-    console.log('form received ' + user.number)
+    const t1 = Date.now()
+    console.log(`${t1 - t0}ms - /signup-form: ${user.name} ${user.number}`)
   } catch (e) {
-    console.log(` ! ERROR ${e}`)
+    error_alert(e)
     res.status(500).end()
   }
 })
@@ -133,14 +122,77 @@ app.post('/message', (req: express.Request, res: express.Response) => {
     analyze_message(message, req.body.accountEmail)
 
     const t1 = Date.now()
-    console.log(`${t1 - t0}ms - /message: ${message.content}`)
-    console.log('message received ' + message.number + ': ' + message.content)
+    console.log(`${t1 - t0}ms - /message: (${message.number}${message.content}`)
   } catch (e) {
     console.log(e)
     send_message({ content: `ERROR: ${e} ${req.body.error_message}`, number: admin_numbers.toString() })
     res.status(500).end()
   }
 })
+
+// ======================================================================================
+// ========================================TESTING=======================================
+// ======================================================================================
+
+// CRON
+// RUNS EVERY 5 MINUTES
+const job = new cron.CronJob('0 */1 * * *', async () => {
+  console.log('CRON:')
+})
+job.start()
+
+async function test() {
+  const response = await openai.createEmbedding({
+    model: "text-embedding-ada-002",
+    input: "The food was delicious and the waiter...",
+  });
+}
+
+test_chrono()
+async function test_chrono() {
+  const parsed_date = chrono.parseDate('july')
+  console.log(parsed_date)
+}
+
+async function test_openAI_query(message: string) {
+  // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
+  const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
+  Prompt: ${message}
+  t0, t1: `
+  
+  const query_prompt = `// You are a super-intelligent AI creating queries. Below is the shape of data for a message. Create a single Prisma ORM query based off the following prompt. Finish after the "const where" statement
+  model messages {
+    content        String?
+    media_url      String?
+    is_outbound    Boolean?
+    date           DateTime @db.Date
+    tokens         Int?
+    keywords       String[]
+    type           String?
+    relevance      Int?
+  }
+  
+  // Date: 2/23/23
+  // Prompt: how many times did I mention Jeff in the January
+  
+  const query = prisma.messages.findMany({
+    where: where,
+  })
+  const where = `
+
+  try {
+    const extract_dates = await openai.createCompletion({ model: 'text-davinci-003', prompt: extract_dates_prompt, max_tokens: 64, temperature: 0.3 })
+    
+    const query_text = await openai.createCompletion({
+      model: 'code-davinci-002', prompt: query_prompt, max_tokens: 128,
+      temperature: 0.5, frequency_penalty: 0, presence_penalty: 0,
+      stop: ['//'],
+    })
+    const where: Object = JSON.parse(query_text.data.choices[0].text!)  //turn string into object to pass into Prisma query
+
+    const query = await prisma.messages.findMany({ where: where, orderBy: { relevance: "desc", }, take: 10, })
+  } catch (e) { error_alert(e) }
+}
 
 // ======================================================================================
 // ========================================FUNCTIONS========================================
@@ -172,8 +224,8 @@ async function analyze_message(message: Message, accountEmail?: string) {
 
   // feedback, help (FAQ->directions->support), image, logging, 
 
-  if (content_lc.includes('admin message\n----') && admin_numbers.includes(message.number!)) {
-    send_message({ content: message.content.split('----').pop(), number: message.number }, test)
+  if (content_lc.includes('admin message\n###') && admin_numbers.includes(message.number!)) {
+    send_message({ content: message.content.split('###').pop(), number: message.number }, test)
   } else {
     format_text(message, test)
   }
@@ -200,7 +252,7 @@ async function get_context(message: Message) {
   return 'need to fix last10Messages'
 }
 
-const getUser = async (message: Message) => await prisma.users.findFirst({ where: { number: message.number }, })
+const get_user = async (number: string) => await prisma.users.findFirst({ where: { number: number }, })
 
 async function format_text(message: Message, test?: boolean) {
   let init_prompt = `CONTEXT (DO NOT MENTION)\ntoday: ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}You are a chatbot used for conversational journaling. You act as a digital mirror of the journaler, helping them explore their emotions and ideas out of their head and into the real world. You are kind, empathetic, and supportive, but are not a pushover and are willing to ask hard questions.
@@ -249,10 +301,18 @@ async function respond_text(message: Message, prompt: string, test?: boolean) {
 }
 
 let send_style_options = new Set(["celebration", "shooting_star", "fireworks", "lasers", "love", "confetti", "balloons", "spotlight", "echo", "invisible", "gentle", "loud", "slam"])
-
+const signup_link = 'https://tally.so/r/w4Q7kX'
+const subscribe_link = 'https://ianwatts.site/robome.html'    //SUBCRIPTION PAYMENT
+const subscription_link = 'https://billing.stripe.com/p/login/9AQ14y0S910meZO6oo'
+const admin_numbers = ['+13104974985', '+12015190240']    // Watts, Pulice
 
 // ====================================ADMIN STUFF==================================
-// where number does not equal the numebrs in admin_numbers and outbound is true
+
+async function error_alert(error: any) {
+  await send_message({ content: `ERROR: ${error}`, number: admin_numbers.toString() })
+  console.error(`ERROR: ${error}`)
+}
+
 // let numberOfMessagesFromUsers = prisma.messages.count({
 //   where: { number: { notIn: admin_numbers }, is_outbound: false }
 // }).then((count) => { console.log(`messages received: ${count}`) })
