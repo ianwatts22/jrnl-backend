@@ -15,7 +15,8 @@ model users {
   name        String?
   email       String?
   timezone    String?
-  most_recent DateTime? @db.Date
+  most_recent DateTime? @db.Timestamptz
+  bio         String    @default("nothing")
 }
 
 model messages {
@@ -23,7 +24,7 @@ model messages {
   content        String?
   media_url      String?
   is_outbound    Boolean?
-  date           DateTime? @db.Date
+  date           DateTime? @db.Timestamptz
   number         String?
   was_downgraded Boolean?  @default(false)
   tokens         Int?
