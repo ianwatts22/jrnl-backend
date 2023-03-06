@@ -6,7 +6,7 @@ import axios from 'axios'
 import express from 'express'
 import morgan from 'morgan'
 import bodyParser from 'body-parser'
-import { Configuration, OpenAIApi } from "openai"
+import { Configuration, OpenAIApi, ChatCompletionRequestMessage } from "openai"
 import cron from 'cron'
 import os from 'os'
 
@@ -39,8 +39,6 @@ client.connect()
 // * USER Profile 
 interface User {
   number: string
-  name: string
-  email?: string
   timezone: string    // EST, PST, MST, CT
   most_recent?: Date
   schedule?: string
@@ -51,7 +49,7 @@ interface User {
 }
 async function log_user(user: User) {
   await prisma.users.create({ data: user })
-  send_message({ content: `NEW USER: ${user.name} ${user.number}`, number: admin_numbers.join() })
+  send_message({ content: `NEW USER`, number: admin_numbers.join() })
 }
 
 // * MESSAGES
@@ -70,6 +68,7 @@ interface Message {
   keywords?: string[]
   type?: string           // response, reach_out, profile_update, query
   relevance?: number
+  reactions?: string[]
 }
 async function log_message(message: Message) { await prisma.messages.create({ data: message }) }
 
@@ -82,15 +81,14 @@ app.post('/signup-form', async (req: express.Request, res: express.Response) => 
     const t0 = Date.now()
     let fields = req.body.data.fields
     res.status(200).end()
-    let user: User = { name: fields[0].value, number: fields[1].value, timezone: fields[2].value.options.find((option: any) => option.id === fields[2].value).text }
+    let user: User = { number: fields[0].value, timezone: fields[1].options.find((option: any) => option.id === fields[1].value).text }
 
     let existing_user = await get_user(user.number)
     if (!existing_user) {
-      send_message({ content: `Hi I'm jrnl, your conversational AI journal. We're trying to  Reply to my questions or text me when you want. I messsage every 3 hours throughout the day, Feel free to react to messages to better train me. Everything operates on natural language, so no need to learn any fancy commands. Your 'bio' provides me insight, helping me help you. Ask to view it or change it anytime. Remember, no special commands just speak as you would Add the contact card and pin me in your messages for quick access.`, media_url: `https://ianwatts22.github.io/jrnl/assets/jrnl.vcf`, number: user.number, send_style: 'laser' })
-    }
-    log_user(user)
-
-    console.log(`${Date.now() - t0}ms - /signup-form: ${user.name} ${user.number}`)
+      await send_message({ content: greeting_message.content, number: user.number, media_url: greeting_message.media_url, send_style: greeting_message.send_style })
+      log_user(user)
+    } else { return }
+    console.log(`${Date.now() - t0}ms - /signup-form ${user.number}`)
   } catch (e) {
     res.status(500).end()
     error_alert(e)
@@ -103,7 +101,7 @@ app.post('/message', (req: express.Request, res: express.Response) => {
     const message: Message = { content: req.body.content, media_url: req.body.media_url, number: req.body.number, was_downgraded: req.body.was_downgraded, is_outbound: false, date: req.body.date_sent, group_id: Number(req.body.group_id) }
     res.status(200).end()
 
-    analyze_message(message, req.body.accountEmail)
+    analyze_message(message)
 
     console.log(`${Date.now() - t0}ms - /message: (${message.number})`)
   } catch (e) {
@@ -127,7 +125,7 @@ app.post('/message-status', (req: express.Request, res: express.Response) => {
 // ========================================TESTING=======================================
 // ======================================================================================
 
-// test()
+test()
 async function test() {
 
 }
@@ -137,44 +135,84 @@ async function test() {
 // ======================================================================================
 
 const job = new cron.CronJob('55 */1 * * *', async () => {
-  const t0 = new Date().getHours(), times = [9, 12, 3, 6, 9], timezones = ['PST', 'MST', 'CST', 'EST']
+  const t0 = new Date().getHours(), times = [9, 13, 17, 21], timezones = ['PST', 'MST', 'CST', 'EST']
   const users_with_timezone = await prisma.users.findMany({ where: { timezone: { not: null } } })
   users_with_timezone.forEach(user => {
-    if (times.includes(t0 + timezones.indexOf(user.timezone!))) {
-      format_text({ content: '', number: user.number})
-    }
+    if (times.includes(t0 + timezones.indexOf(user.timezone!))) { format_text({ content: '', number: user.number }) }
   })
 })
 job.start()
 
-async function analyze_message(message: Message, accountEmail?: string) {
+let users: string[]
+local_data()
+async function local_data() {
+  try {
+    users = await prisma.users.findMany({ select: { number: true } }).then(users => users.map(user => user.number))
+  } catch (e) { console.log(e) }
+}
+
+async function analyze_message(message: Message) {
   const t0 = Date.now()
   if (!message.content || !message.number) { return }
   await log_message(message)
 
+  if (!users.includes(message.number)) {
+    await send_message({ content: greeting_message.content, number: message.number, media_url: greeting_message.media_url, send_style: greeting_message.send_style })
+    users.push(message.number!)
+    return
+  }
   const content_lc = message.content.toLowerCase()
-  const reactions = ['liked', 'disliked', 'emphasized', 'laughed at', 'loved']
-  if (reactions.some(reaction => content_lc.startsWith(reaction))) { return }
+  const reactions = ['Liked', 'Disliked', 'Emphasized', 'Laughed at', 'Loved']
+  if (reactions.some(reaction => content_lc.startsWith(reaction))) {
+    const reacted_to = message.content.split('"', 2)[1].slice(0, -1)
+    const reaction = message.content.split('"', 2)[0].slice(0, -1)
+    const reacted_message = await prisma.messages.findFirst({ where: { number: message.number, content: reacted_to } })
+    if (reacted_message) {
+      let new_reactions: string[] = reacted_message.reactions
+      new_reactions.push(reaction)
+      prisma.messages.update({ where: { id: reacted_message.id }, data: { reactions: new_reactions } })
+    }
+    return
+  }
 
   if (content_lc.includes('admin message\n###') && admin_numbers.includes(message.number!)) {
     send_message({ content: message.content.split('###').pop(), number: message.number })
     return
   }
 
-  let previous_messages = await get_previous_messages(message, 6)
   const categories = ['discuss', 'update_profile', 'customer_support']
   const categorize = async () => {
     try {
+      const previous_messages = await get_previous_messages(message, 6)
       const category_response = await openai.createCompletion({
         model: 'text-davinci-003', temperature: 0.3,
         prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works. Examples:\nText: I need help planning my day\nCategory: discuss\nText: what's my bio\nCategory: update_profile\nText: change my hometown to Ann Arbor\nCategory: update_profile\nText: how does this app work\nCategory: customer_support\nSome of your previous conversation is included below for context###${previous_messages}###\nText: ${message.content}\nCategory:`
       })
-      return category_response.data.choices[0].text?.toLowerCase().replace(/\s/g, '')
+
+      /* let prompt: ChatCompletionRequestMessage[] = [
+        { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
+        { role: 'system', name: 'example_user', content: 'I need help planning my day' },
+        { role: 'system', name: 'example_assistant', content: 'discuss' },
+        { role: 'system', name: 'example_user', content: `what's my bio` },
+        { role: 'system', name: 'example_assistant', content: 'update_profile' },
+        { role: 'system', name: 'example_user', content: `change my hometown to Ann Arbor` },
+        { role: 'system', name: 'example_assistant', content: 'update_profile' },
+        { role: 'system', name: 'example_user', content: `how does this app work` },
+        { role: 'system', name: 'example_assistant', content: 'customer_support' },
+      ]
+      prompt = prompt.concat(previous_messages)
+      prompt = prompt.concat([{ role: 'user', content: message.content! }])
+      console.log(prompt)
+
+      const completion = await openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.3, messages: prompt, }) */
+
+      return category_response.data.choices[0].text!.toLowerCase().replace(/\s/g, '')
+      // return completion.data.choices[0].message!.content.toLowerCase().replace(/\s/g, '')
     } catch (e) { return null }
   }
 
   const category = await categorize()
-  console.log(`category_lc: ${category}`)
+  console.log(`category: ${category}`)
   if (!category || !categories.includes(category!)) {
     error_alert(` ! miscategorization (${message.number}): '${message.content}'\ncategory: ${category}`)
     await send_message({ content: `sorry bugged out, try again`, number: message.number })
@@ -187,12 +225,26 @@ async function analyze_message(message: Message, accountEmail?: string) {
   } else if (category.includes('update_profile')) {
     const user = await get_user(message.number!)
     let openAIResponse = await openai.createCompletion({
-      model: 'text-davinci-003', max_tokens: 512, temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0,  // presence and frequency maxed
-      prompt: `Below is a message from the user along with their bio. We believe they to view their existing bio or update it. First determine their intent (view or update), then return either their existing or updated bio. If their bio is blank, put "empty". Previous messages are included which may help. Condense the information, remove extraneous words. Replace many words with few. Group relevant information. Separate disparate information with new lines. Format the bio like the following example, extracting the key words from the message.\n###\nExample bio:\n- from Los Angeles\n- studied mechanical engineering\n- polymath\n###\nRespond in the following format: <view or update>:<bio>\nBio:\n${user ? user.bio : ''}\nMessage: ${message.content}\nResponse:`
+      model: 'text-davinci-003', max_tokens: 512, temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0,
+      prompt: `Below is a message from the user along with their bio. We believe they want to view their existing bio or update it. First determine their intent (view or update), then return either their existing or updated bio. If their bio is blank, put "empty". Previous messages are included which may help. Condense the information, remove extraneous words. Replace many words with few. Group relevant information. Separate disparate information with new lines. Format the bio like the following example, extracting the key words from the message.\n###\nExample bio:\n- from Los Angeles\n- studied mechanical engineering\n- polymath\n###\nRespond in the following format: <view or update>:<bio>\nBio:\n${user ? user.bio : ''}\nMessage: ${message.content}\nResponse:`
     })
+
+    /* let prompt: ChatCompletionRequestMessage[] = [
+      { role: 'system', content: `Below is a message from the user along with their bio. We believe they want to view their existing bio or update it. First determine their intent (view or update), then return either their existing or updated bio. If their bio is blank, put "empty". Previous messages are included which may help. Condense the information, remove extraneous words. Replace many words with few. Group relevant information. Separate disparate information with new lines. Format the bio like the following example, extracting the key words from the message.` },
+      { role: 'system', name: 'example_user', content: 'I went to the University of Michigan where I studied mechanical engineering and was in fraternity' },
+      { role: 'system', name: 'example_assistant', content: `<previous bio>\n- University of Michigan: studied mechanical engineering, in fraternity` },
+      { role: 'user', content: message.content! },
+    ]
+    const previous_messages = await get_previous_messages(message, 20)
+
+    const completion = await openai.createChatCompletion({
+      model: 'gpt-3.5-turbo', temperature: 0.3, max_tokens: 512, presence_penalty: 2.0, frequency_penalty: 2.0,
+      messages: prompt.concat(previous_messages),
+    }) */
+
     const response = openAIResponse.data.choices[0].text!.split(':')
     console.log(response)
-    await send_message({ content: `${response[0].toLowerCase().replace(/\s/g,'') == 'view' ? 'your bio:' : 'updated bio:'}\n${response[1]}`, number: message.number })
+    await send_message({ content: `${response[0].toLowerCase().replace(/\s/g, '') == 'view' ? 'your bio:' : 'updated bio:'}\n${response[1]}`, number: message.number })
     await prisma.users.update({ where: { number: message.number! }, data: { bio: response[1] } })
 
   } else if (category.includes('customer_support')) {
@@ -208,58 +260,84 @@ async function analyze_message(message: Message, accountEmail?: string) {
 
 async function format_text(message: Message) {
   let init_prompt = `CONTEXT (DO NOT MENTION)\ntoday: ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-You are a chatbot used to ask questions about someones life. You are to act as a way for the user to easily journal their life, helping them record their emotions and day to day life. You are kind, empathetic, and supportive, but are willing to ask hard questions and hold people accountable. Try to reflect who they are, acting as a mirror for people to better see and understand themselves.
+You are a chatbot used to ask questions about someone's life. You are to act as a way for the user to easily journal their life, helping them record their emotions and day-to-day life. You are kind, empathetic, and supportive, but are willing to ask hard questions and hold people accountable. Reflect who they are, acting as a mirror for people to better see and understand themselves. You speak in few words, with wit and humor.
 
-LIMITATIONS:
+LIMITATIONS
 You have no internet access, and may get specific facts wrong. 
 
-GUIDELINES: 
+GUIDELINES
 Be inquisitive about a person's day, their activities, how they feel emotionally.
 Ask people to expand on things if they are not clear.
 Be curious about things they say.
 Ask them to be specific.
 Speak casually (contractions, slang, emojis ok).
-Be friendly.
+Speak in few workds, consolidate sentences.
 Avoid repeating information.
 Be reassuring when replying to negative comments.
 Do not provide or mention links to the internet.
 
 A bio of the user is provided below for you to better understand who they are and empathize with them.`
 
+  const reacted_messages = await prisma.messages.findMany({
+    where: { number: message.number, reactions: { hasSome: ["Loved", "Emphasized"] } },
+    orderBy: { date: "desc" }, take: 10
+  })
+  const reacted_preceding_messages = reacted_messages.map(async (message: messages) => {
+    return await prisma.messages.findFirst({ where: { number: message.number, id: message.id - 1 } })
+  })
+  const reacted_messages_array = reacted_messages.flatMap((value, index) => [value, reacted_preceding_messages[index]])
+  const reacted_messages_array_2: ChatCompletionRequestMessage[] = reacted_messages.map((message: messages) => {
+    return {
+      role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user',
+      content: `[${message.date!.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`
+    }
+  })
+
   const user = await get_user(message.number!)
 
-  let previous_messages = await get_previous_messages(message)
-
-  let prompt = `${init_prompt}\n${user!.bio}\n###\n${previous_messages}\n[${new Date().toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}] Journal:`
-
+  let previous_messages = await get_previous_messages(message, 20)
+  let prompt: ChatCompletionRequestMessage[] = [
+    { role: 'system', content: init_prompt },
+    // { role: 'system', name: 'example_user', content: '' }, { role: 'system', name: 'example_assistant', content: '' },
+  ]
+  prompt = prompt.concat(previous_messages)
+  prompt = prompt.concat([{ role: 'user', content: message.content! }])
   console.log(prompt)
-  respond_text(message, prompt)
+
+  const completion = await openai.createChatCompletion({
+    model: 'gpt-3.5-turbo', temperature: 0.7, presence_penalty: 0.0, frequency_penalty: 1.0, max_tokens: 2048, messages: prompt,
+  })
+  let completion_string = completion.data.choices[0].message!.content
+  if (completion_string.includes('M]')) { completion_string = completion_string.split('M] ')[1] }
+
+  await send_message({ content: completion_string, number: message.number, tokens: message.tokens })
 }
 
-async function get_previous_messages(message: Message, amount: number = 20) {
+async function get_previous_messages(message: Message, amount: number = 14) {
   // TODO: not ideal cuz parses EVERY message from that number lol
   const resetMessage = await prisma.messages.findFirst({ where: { number: message.number, content: 'r' }, orderBy: { id: 'desc' } })
   let resetMessageLoc
   resetMessage === null ? resetMessageLoc = 0 : resetMessageLoc = resetMessage.id
-  const previous_messages = await prisma.messages.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount })
+  let previous_messages = await prisma.messages.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount })
 
-  const previous_messages_string = previous_messages.map((message: messages) => { return `\n[${message.date ? message.date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }) : null}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).reverse().join('')
-  return previous_messages_string
+  // const previous_messages_string = previous_messages.map((message: messages) => { return `\n[${message.date ? message.date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }) : null}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).reverse().join('')
+  // return previous_messages_string
+
+  previous_messages = previous_messages.reverse()
+  const previous_messages_array: ChatCompletionRequestMessage[] = previous_messages.map((message: messages) => {
+    return {
+      role: message.is_outbound ? "assistant" : "user",
+      // content: message.content!,
+      content: `[${message.date!.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`,  // TODO need to test this, will it fuck it up?
+    }
+  })
+
+  return previous_messages_array
 }
 
-async function respond_text(message: Message, prompt: string) {
-  try {
-    const t0 = Date.now()
-
-    let openAIResponse = await openai.createCompletion({
-      model: 'text-davinci-003',
-      prompt: prompt, max_tokens: 512, temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
-    })
-
-    await send_message({ content: openAIResponse.data.choices[0].text, number: message.number, tokens: message.tokens })
-    console.log(`${Date.now() - t0}ms - respond_text`)
-  } catch (err) { console.log(` ! respond_text error: ${err}`) }
-}
+// ======================================================================================
+// ========================================BASICS=======================================
+// ======================================================================================
 
 const send_style_options = ["celebration", "shooting_star", "fireworks", "lasers", "love", "confetti", "balloons", "spotlight", "echo", "invisible", "gentle", "loud", "slam"]
 const signup_link = 'https://tally.so/r/w4Q7kX', admin_numbers = ['+13104974985', '+12015190240']
@@ -284,3 +362,5 @@ async function error_alert(error: any) {
   // await send_message({ content: `ERROR: ${error}`, number: admin_numbers.toString() })
   console.error(`ERROR: ${error}`)
 }
+
+const greeting_message: Message = { content: `Hi I'm jrnl, your conversational AI journal. We're trying to  Reply to my questions or text me when you want. I messsage every 3 hours throughout the day, Feel free to react to messages to better train me. Everything operates on natural language, so no need to learn any fancy commands. Your 'bio' provides me insight, helping me help you. Ask to view it or change it anytime. Remember, no special commands just speak as you would Add the contact card and pin me in your messages for quick access.`, media_url: `https://ianwatts22.github.io/jrnl/assets/jrnl.vcf`, send_style: 'laser' }

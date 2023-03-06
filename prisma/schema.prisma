@@ -12,11 +12,9 @@ datasource db {
 
 model users {
   number      String    @id
-  name        String?
-  email       String?
   timezone    String?
   most_recent DateTime? @db.Timestamptz
-  bio         String    @default("nothing")
+  bio         String    @default("blank")
 }
 
 model messages {
@@ -33,4 +31,7 @@ model messages {
   type           String?
   group_id       Int?
   relevance      Int?
+  reactions      String[]
+  // reactions      messages[]
+  // messages       messages?  @relation(fields: [messagesId], references: [id])
 }
