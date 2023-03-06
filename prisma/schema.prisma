@@ -18,20 +18,20 @@ model users {
 }
 
 model messages {
-  id             Int       @id @default(autoincrement())
-  content        String?
-  media_url      String?
-  is_outbound    Boolean?
-  date           DateTime? @db.Timestamptz
-  number         String?
-  was_downgraded Boolean?  @default(false)
-  tokens         Int?
-  send_style     String?
-  keywords       String[]
-  type           String?
-  group_id       Int?
-  relevance      Int?
-  reactions      String[]
+  id              Int       @id @default(autoincrement())
+  content         String?
+  media_url       String?
+  is_outbound     Boolean?
+  date            DateTime? @db.Timestamptz
+  number          String?
+  was_downgraded  Boolean?  @default(false)
+  tokens          Int?
+  send_style      String?
+  keywords        String[]
+  type            String?
+  group_id        Int?
+  relevance       Int?
+  reactions       String[]
   content_letters String?
   // reactions      messages[]
   // messages       messages?  @relation(fields: [messagesId], references: [id])
