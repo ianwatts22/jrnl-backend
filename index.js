@@ -48,21 +48,16 @@ process.env.PGHOST.includes('render') ? clientConfig = { user: process.env.PGUSE
 const client = new pg_1.Client(clientConfig);
 const prisma = new client_1.PrismaClient();
 client.connect();
-update_prisma_db();
+// update_prisma_db()
 function update_prisma_db() {
     return __awaiter(this, void 0, void 0, function* () {
-        const all_messages = yield prisma.messages.findMany();
-        for (let message of all_messages) {
-            if (message.content)
-                message.content_letters = message.content.slice(0, 30).replace(/[^a-z]/gi, "");
-            yield prisma.messages.update({ where: { id: message.id }, data: message });
-        }
     });
 }
 function log_user(user) {
     return __awaiter(this, void 0, void 0, function* () {
         yield prisma.users.create({ data: user });
         send_message({ content: `NEW USER`, number: admin_numbers.join() });
+        users.push(user.number);
     });
 }
 function log_message(message) {
@@ -171,7 +166,7 @@ local_data();
 function local_data() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            users = yield prisma.users.findMany({ select: { number: true } }).then(users => users.map(user => user.number));
+            users = yield prisma.users.findMany().then(users => users.map(user => user.number));
         }
         catch (e) {
             console.log(e);
@@ -218,28 +213,28 @@ function analyze_message(message) {
             try {
                 const previous_messages = yield get_previous_messages(message, 6);
                 // old jawn, still working
-                /* const category_response = await openai.createCompletion({
-                  model: 'text-davinci-003', temperature: 0.3,
-                  prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works. Examples:\nText: I need help planning my day\nCategory: discuss\nText: what's my bio\nCategory: update_profile\nText: change my hometown to Ann Arbor\nCategory: update_profile\nText: how does this app work\nCategory: customer_support\nSome of your previous conversation is included below for context###${previous_messages}###\nText: ${message.content}\nCategory:`
-                })
-                return category_response.data.choices[0].text!.toLowerCase().replace(/\s/g, '') */
-                // new jawn, not working
-                let prompt = [
-                    { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
-                    { role: 'system', name: 'example_user', content: 'text: I need help planning my day' },
-                    { role: 'system', name: 'example_assistant', content: 'category: discuss' },
-                    { role: 'system', name: 'example_user', content: `text: what's my bio` },
-                    { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
-                    { role: 'system', name: 'example_user', content: `text: change my hometown to Ann Arbor` },
-                    { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
-                    { role: 'system', name: 'example_user', content: `text: how does this app work` },
-                    { role: 'system', name: 'example_assistant', content: 'category: customer_support' },
-                ];
+                const category_response = yield openai.createCompletion({
+                    model: 'text-davinci-003', temperature: 0.3,
+                    prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works. Examples:\nText: I need help planning my day\nCategory: discuss\nText: what's my bio\nCategory: update_profile\nText: change my hometown to Ann Arbor\nCategory: update_profile\nText: how does this app work\nCategory: customer_support\nSome of your previous conversation is included below for context###${previous_messages}###\nText: ${message.content}\nCategory:`
+                });
+                return category_response.data.choices[0].text.toLowerCase().replace(/\s/g, '');
+                // ! new jawn, not working
+                /* let prompt: ChatCompletionRequestMessage[] = [
+                  { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
+                  { role: 'system', name: 'example_user', content: 'text: I need help planning my day' },
+                  { role: 'system', name: 'example_assistant', content: 'category: discuss' },
+                  { role: 'system', name: 'example_user', content: `text: what's my bio` },
+                  { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+                  { role: 'system', name: 'example_user', content: `text: change my hometown to Ann Arbor` },
+                  { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+                  { role: 'system', name: 'example_user', content: `text: how does this app work` },
+                  { role: 'system', name: 'example_assistant', content: 'category: customer_support' },
+                ]
                 // prompt = prompt.concat(previous_messages) // ? does this do more harm than good?
-                prompt = prompt.concat([{ role: 'user', content: `text: ${message.content}` }]);
-                console.log(prompt);
-                const completion = yield openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.1, messages: prompt, n: 4 });
-                return completion.data.choices[0].message.content.split(':')[1].toLowerCase().replace(/\s/g, '');
+                prompt = prompt.concat([{ role: 'user', content: `text: ${message.content!}` }])
+                console.log(prompt)
+                const completion = await openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.1, messages: prompt, n: 4 })
+                return completion.data.choices[0].message!.content.split(':')[1].toLowerCase().replace(/\s/g, '') */
             }
             catch (e) {
                 yield send_message({ content: `sorry bugged out, try again`, number: message.number });

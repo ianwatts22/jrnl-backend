@@ -10,4 +10,5 @@
 
 [chrono](https://github.com/wanasit/chrono): natural language date parser
 [Pinecone vector db](https://docs.pinecone.io/docs/node-client)
+
 - [OpenAI](https://docs.pinecone.io/docs/openai)

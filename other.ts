@@ -1,3 +1,9 @@
+
+
+// ========================================================================================
+// ======================================EMBEDDINGS========================================
+// ========================================================================================
+
 // /* embeddings
 // import { PineconeClient } from '@pinecone-database/pinecone'
 // const pinecone = new PineconeClient();
@@ -37,14 +43,6 @@
 //     relevance      Int?
 //   }
   
-//   // Date: 2/23/23
-//   // Prompt: how many times did I mention Jeff in the January
-  
-//   const query = prisma.messages.findMany({
-//     where: where,
-//   })
-//   const where = `
-
 //   try {
 //     const extract_dates = await openai.createCompletion({ model: 'text-davinci-003', prompt: extract_dates_prompt, max_tokens: 64, temperature: 0.3 })
 
