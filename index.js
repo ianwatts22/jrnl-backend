@@ -48,6 +48,17 @@ process.env.PGHOST.includes('render') ? clientConfig = { user: process.env.PGUSE
 const client = new pg_1.Client(clientConfig);
 const prisma = new client_1.PrismaClient();
 client.connect();
+update_prisma_db();
+function update_prisma_db() {
+    return __awaiter(this, void 0, void 0, function* () {
+        const all_messages = yield prisma.messages.findMany();
+        for (let message of all_messages) {
+            if (message.content)
+                message.content_letters = message.content.slice(0, 30).replace(/[^a-z]/gi, "");
+            yield prisma.messages.update({ where: { id: message.id }, data: message });
+        }
+    });
+}
 function log_user(user) {
     return __awaiter(this, void 0, void 0, function* () {
         yield prisma.users.create({ data: user });
@@ -55,8 +66,13 @@ function log_user(user) {
     });
 }
 function log_message(message) {
-    return __awaiter(this, void 0, void 0, function* () { yield prisma.messages.create({ data: message }); });
+    return __awaiter(this, void 0, void 0, function* () {
+        if (message.content)
+            message.content_letters = content_letters(message.content);
+        yield prisma.messages.create({ data: message });
+    });
 }
+const content_letters = (content) => content.slice(0, 30).replace(/[^a-z]/gi, "");
 // ======================================================================================
 // ========================================ROUTES========================================
 // ======================================================================================
@@ -86,6 +102,7 @@ app.post('/message', (req, res) => {
         const t0 = Date.now();
         const message = { content: req.body.content, media_url: req.body.media_url, number: req.body.number, was_downgraded: req.body.was_downgraded, is_outbound: false, date: req.body.date_sent, group_id: Number(req.body.group_id) };
         res.status(200).end();
+        console.log(message.content);
         analyze_message(message);
         console.log(`${Date.now() - t0}ms - /message: (${message.number})`);
     }
@@ -109,9 +126,31 @@ app.post('/message-status', (req, res) => {
 // ======================================================================================
 // ========================================TESTING=======================================
 // ======================================================================================
-test();
+// test()
 function test() {
     return __awaiter(this, void 0, void 0, function* () {
+        let message = { content: `text: what's the share link` };
+        const categories = ['discuss', 'update_profile', 'customer_support'];
+        let prompt = [
+            { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
+            { role: 'system', name: 'example_user', content: 'text: I need help planning my day' },
+            { role: 'system', name: 'example_assistant', content: 'category: discuss' },
+            { role: 'system', name: 'example_user', content: `text: what's my bio` },
+            { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+            { role: 'system', name: 'example_user', content: `text: change my hometown to Ann Arbor` },
+            { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+            { role: 'system', name: 'example_user', content: `text: how does this app work` },
+            { role: 'system', name: 'example_assistant', content: 'category: customer_support' },
+        ];
+        // prompt = prompt.concat(previous_messages) // ? does this do more harm than good?
+        prompt = prompt.concat([{ role: 'user', content: `text: ${message.content}` }]);
+        console.log(prompt);
+        const completion = yield openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.1, messages: prompt, n: 4 });
+        // console.log(JSON.stringify(completion))
+        console.log(completion.data.choices[0]);
+        const choices = completion.data.choices.map((choice) => choice.message.content);
+        console.log(choices);
+        // return completion.data.choices[0].message!.content.split(':')[1].toLowerCase().replace(/\s/g, '')
     });
 }
 // ======================================================================================
@@ -151,20 +190,26 @@ function analyze_message(message) {
             users.push(message.number);
             return;
         }
-        const content_lc = message.content.toLowerCase();
         const reactions = ['Liked', 'Disliked', 'Emphasized', 'Laughed at', 'Loved'];
-        if (reactions.some(reaction => content_lc.startsWith(reaction))) {
-            const reacted_to = message.content.split('"', 2)[1].slice(0, -1);
-            const reaction = message.content.split('"', 2)[0].slice(0, -1);
-            const reacted_message = yield prisma.messages.findFirst({ where: { number: message.number, content: reacted_to } });
+        if (reactions.some(reaction => message.content.startsWith(reaction))) {
+            const reaction = message.content.split('“', 2)[0].slice(0, -1);
+            console.log(reaction);
+            let reacted_to = message.content.split('“', 2)[1].slice(0, -3);
+            console.log(reacted_to);
+            console.log(content_letters(reacted_to));
+            const reacted_message = yield prisma.messages.findFirst({ where: { number: message.number, content_letters: { startsWith: content_letters(reacted_to) } } });
+            console.log(reacted_message);
             if (reacted_message) {
                 let new_reactions = reacted_message.reactions;
+                console.log('1 ', new_reactions);
                 new_reactions.push(reaction);
-                prisma.messages.update({ where: { id: reacted_message.id }, data: { reactions: new_reactions } });
+                console.log('2 ', new_reactions);
+                yield prisma.messages.update({ where: { id: reacted_message.id }, data: { reactions: new_reactions } });
+                console.log(`(${message.number}) reacted to ${reacted_to}\nnew reactions: ${new_reactions}`);
             }
             return;
         }
-        if (content_lc.includes('admin message\n###') && admin_numbers.includes(message.number)) {
+        if (message.content.includes('admin message\n###') && admin_numbers.includes(message.number)) {
             send_message({ content: message.content.split('###').pop(), number: message.number });
             return;
         }
@@ -172,31 +217,33 @@ function analyze_message(message) {
         const categorize = () => __awaiter(this, void 0, void 0, function* () {
             try {
                 const previous_messages = yield get_previous_messages(message, 6);
-                const category_response = yield openai.createCompletion({
-                    model: 'text-davinci-003', temperature: 0.3,
-                    prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works. Examples:\nText: I need help planning my day\nCategory: discuss\nText: what's my bio\nCategory: update_profile\nText: change my hometown to Ann Arbor\nCategory: update_profile\nText: how does this app work\nCategory: customer_support\nSome of your previous conversation is included below for context###${previous_messages}###\nText: ${message.content}\nCategory:`
-                });
-                /* let prompt: ChatCompletionRequestMessage[] = [
-                  { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
-                  { role: 'system', name: 'example_user', content: 'I need help planning my day' },
-                  { role: 'system', name: 'example_assistant', content: 'discuss' },
-                  { role: 'system', name: 'example_user', content: `what's my bio` },
-                  { role: 'system', name: 'example_assistant', content: 'update_profile' },
-                  { role: 'system', name: 'example_user', content: `change my hometown to Ann Arbor` },
-                  { role: 'system', name: 'example_assistant', content: 'update_profile' },
-                  { role: 'system', name: 'example_user', content: `how does this app work` },
-                  { role: 'system', name: 'example_assistant', content: 'customer_support' },
-                ]
-                prompt = prompt.concat(previous_messages)
-                prompt = prompt.concat([{ role: 'user', content: message.content! }])
-                console.log(prompt)
-          
-                const completion = await openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.3, messages: prompt, }) */
-                return category_response.data.choices[0].text.toLowerCase().replace(/\s/g, '');
-                // return completion.data.choices[0].message!.content.toLowerCase().replace(/\s/g, '')
+                // old jawn, still working
+                /* const category_response = await openai.createCompletion({
+                  model: 'text-davinci-003', temperature: 0.3,
+                  prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works. Examples:\nText: I need help planning my day\nCategory: discuss\nText: what's my bio\nCategory: update_profile\nText: change my hometown to Ann Arbor\nCategory: update_profile\nText: how does this app work\nCategory: customer_support\nSome of your previous conversation is included below for context###${previous_messages}###\nText: ${message.content}\nCategory:`
+                })
+                return category_response.data.choices[0].text!.toLowerCase().replace(/\s/g, '') */
+                // new jawn, not working
+                let prompt = [
+                    { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
+                    { role: 'system', name: 'example_user', content: 'text: I need help planning my day' },
+                    { role: 'system', name: 'example_assistant', content: 'category: discuss' },
+                    { role: 'system', name: 'example_user', content: `text: what's my bio` },
+                    { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+                    { role: 'system', name: 'example_user', content: `text: change my hometown to Ann Arbor` },
+                    { role: 'system', name: 'example_assistant', content: 'category: update_profile' },
+                    { role: 'system', name: 'example_user', content: `text: how does this app work` },
+                    { role: 'system', name: 'example_assistant', content: 'category: customer_support' },
+                ];
+                // prompt = prompt.concat(previous_messages) // ? does this do more harm than good?
+                prompt = prompt.concat([{ role: 'user', content: `text: ${message.content}` }]);
+                console.log(prompt);
+                const completion = yield openai.createChatCompletion({ model: 'gpt-3.5-turbo', temperature: 0.1, messages: prompt, n: 4 });
+                return completion.data.choices[0].message.content.split(':')[1].toLowerCase().replace(/\s/g, '');
             }
             catch (e) {
-                return null;
+                yield send_message({ content: `sorry bugged out, try again`, number: message.number });
+                return;
             }
         });
         const category = yield categorize();
@@ -267,11 +314,16 @@ A bio of the user is provided below for you to better understand who they are an
             where: { number: message.number, reactions: { hasSome: ["Loved", "Emphasized"] } },
             orderBy: { date: "desc" }, take: 10
         });
-        const reacted_preceding_messages = reacted_messages.map((message) => __awaiter(this, void 0, void 0, function* () {
-            return yield prisma.messages.findFirst({ where: { number: message.number, id: message.id - 1 } });
-        }));
-        const reacted_messages_array = reacted_messages.flatMap((value, index) => [value, reacted_preceding_messages[index]]);
-        const reacted_messages_array_2 = reacted_messages.map((message) => {
+        const reacted_preceding_messages = yield Promise.all(reacted_messages.map((message) => __awaiter(this, void 0, void 0, function* () {
+            try {
+                return yield prisma.messages.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } });
+            }
+            catch (e) {
+                return message;
+            }
+        })));
+        let reacted_messages_array = reacted_preceding_messages.flatMap((value, index) => [value, reacted_messages[index]]);
+        const reacted_messages_examples = reacted_messages_array.map((message) => {
             return {
                 role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user',
                 content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`
@@ -279,10 +331,8 @@ A bio of the user is provided below for you to better understand who they are an
         });
         const user = yield get_user(message.number);
         let previous_messages = yield get_previous_messages(message, 20);
-        let prompt = [
-            { role: 'system', content: init_prompt },
-            // { role: 'system', name: 'example_user', content: '' }, { role: 'system', name: 'example_assistant', content: '' },
-        ];
+        let prompt = [{ role: 'system', content: init_prompt }];
+        prompt = prompt.concat(reacted_messages_examples); // add reacted messages as examples
         prompt = prompt.concat(previous_messages);
         prompt = prompt.concat([{ role: 'user', content: message.content }]);
         console.log(prompt);
@@ -298,19 +348,16 @@ A bio of the user is provided below for you to better understand who they are an
 }
 function get_previous_messages(message, amount = 14) {
     return __awaiter(this, void 0, void 0, function* () {
-        // TODO: not ideal cuz parses EVERY message from that number lol
-        const resetMessage = yield prisma.messages.findFirst({ where: { number: message.number, content: 'r' }, orderBy: { id: 'desc' } });
+        // TODO not ideal cuz parses EVERY message from that number lol
+        const resetMessage = yield prisma.messages.findFirst({ where: { number: message.number, content: 'reset' }, orderBy: { id: 'desc' } });
         let resetMessageLoc;
         resetMessage === null ? resetMessageLoc = 0 : resetMessageLoc = resetMessage.id;
         let previous_messages = yield prisma.messages.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount });
-        // const previous_messages_string = previous_messages.map((message: messages) => { return `\n[${message.date ? message.date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }) : null}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).reverse().join('')
-        // return previous_messages_string
         previous_messages = previous_messages.reverse();
         const previous_messages_array = previous_messages.map((message) => {
             return {
                 role: message.is_outbound ? "assistant" : "user",
-                // content: message.content!,
-                content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`, // TODO need to test this, will it fuck it up?
+                content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`
             };
         });
         return previous_messages_array;

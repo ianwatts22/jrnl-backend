@@ -32,6 +32,7 @@ model messages {
   group_id       Int?
   relevance      Int?
   reactions      String[]
+  content_letters String?
   // reactions      messages[]
   // messages       messages?  @relation(fields: [messagesId], references: [id])
 }
