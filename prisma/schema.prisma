@@ -15,6 +15,10 @@ model users {
   timezone    String?
   most_recent DateTime? @db.Timestamptz
   bio         String    @default("blank")
+  model       String?
+  temp        Decimal?  @db.Decimal(3, 2)
+  pres        Decimal?  @db.Decimal(3, 2)
+  freq        Decimal?  @db.Decimal(3, 2)
 }
 
 model messages {

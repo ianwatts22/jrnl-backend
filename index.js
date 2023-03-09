@@ -39,6 +39,7 @@ app.use(express_1.default.static('public'));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use(body_parser_1.default.json());
 app.use((0, morgan_1.default)('dev'));
+app.use('/assets', express_1.default.static('assets'));
 // ========================================================================================
 // ========================================DATABASE========================================
 // ========================================================================================
@@ -148,8 +149,16 @@ function test() {
         // return completion.data.choices[0].message!.content.split(':')[1].toLowerCase().replace(/\s/g, '')
     });
 }
+function test_openAI_query(message) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
+        const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
+  Prompt: ${message}
+  t0, t1: `;
+    });
+}
 // ======================================================================================
-// ========================================FUNCTIONS=====================================
+// ======================================CRON, CACHE=====================================
 // ======================================================================================
 const job = new cron_1.default.CronJob('55 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     const t0 = new Date().getHours(), times = [9, 13, 17, 21], timezones = ['PST', 'MST', 'CST', 'EST'];
@@ -173,45 +182,65 @@ function local_data() {
         }
     });
 }
+// ======================================================================================
+// ========================================FUNCTIONS=====================================
+// ======================================================================================
+let temp = 0.9, pres = 1.0, freq = 1.0, model = 'chat';
+const adjust_message = `adjust weights like this:\n'w:<temp>,<pres>,<freq>'\nex: 'w:0.9,1.0,1.0'\nreset with 'w:reset'\nchange between ChatGPT and (text) Davinci with 'm:chat' or 'm:text'`;
 function analyze_message(message) {
     return __awaiter(this, void 0, void 0, function* () {
         const t0 = Date.now();
-        if (!message.content || !message.number) {
+        if (!message.content || !message.number || message.content.toLowerCase() === 'reset') {
             return;
         }
-        yield log_message(message);
-        if (!users.includes(message.number)) {
-            yield send_message({ content: greeting_message.content, number: message.number, media_url: greeting_message.media_url, send_style: greeting_message.send_style });
-            users.push(message.number);
-            return;
-        }
+        let user = yield get_user(message.number);
+        // checking for reactions
         const reactions = ['Liked', 'Disliked', 'Emphasized', 'Laughed at', 'Loved'];
         if (reactions.some(reaction => message.content.startsWith(reaction))) {
             const reaction = message.content.split('“', 2)[0].slice(0, -1);
-            console.log(reaction);
             let reacted_to = message.content.split('“', 2)[1].slice(0, -3);
-            console.log(reacted_to);
-            console.log(content_letters(reacted_to));
             const reacted_message = yield prisma.messages.findFirst({ where: { number: message.number, content_letters: { startsWith: content_letters(reacted_to) } } });
-            console.log(reacted_message);
             if (reacted_message) {
                 let new_reactions = reacted_message.reactions;
-                console.log('1 ', new_reactions);
                 new_reactions.push(reaction);
-                console.log('2 ', new_reactions);
                 yield prisma.messages.update({ where: { id: reacted_message.id }, data: { reactions: new_reactions } });
-                console.log(`(${message.number}) reacted to ${reacted_to}\nnew reactions: ${new_reactions}`);
             }
             return;
         }
-        if (message.content.includes('admin message\n###') && admin_numbers.includes(message.number)) {
-            send_message({ content: message.content.split('###').pop(), number: message.number });
-            return;
+        // admin commands
+        if (user) {
+            if (message.content.includes('admin message\n###') && admin_numbers.includes(message.number)) {
+                send_message({ content: message.content.split('###').pop(), number: message.number });
+                return;
+            }
+            else if (admin_numbers.includes(message.number) && message.content.startsWith('w:')) {
+                let temp, pres, freq, values = message.content.split('w:')[1];
+                if (values == 'reset') {
+                    temp = null, pres = null, freq = null;
+                }
+                else {
+                    temp = Number(values.split(',')[0]), pres = Number(values.split(',')[1]), freq = Number(values.split(',')[2]);
+                }
+                send_message({ content: `weights updated from (temp,pres,freq) = (${user.temp}, ${user.pres}, ${user.freq}) to (${temp}, ${pres}, ${freq})`, number: message.number });
+                yield prisma.users.update({ where: { number: message.number }, data: { temp, pres, freq } });
+                return;
+            }
+            else if (admin_numbers.includes(message.number) && message.content.startsWith('m:')) {
+                let model = message.content.split('m:')[1];
+                if (model == 'chat' || model == 'text') {
+                    yield prisma.users.update({ where: { number: message.number }, data: { model } });
+                    send_message({ content: `${model} activated\nweights (temp,pres,freq) = ${user.temp}, ${user.pres}, ${user.freq}\ndefault weights = ${temp}, ${pres}, ${freq}`, number: message.number });
+                    return;
+                }
+                send_message({ content: `think your formatting's wrong, try 'm:chat' or 'm:text'`, number: message.number });
+            }
         }
+        yield log_message(message); // don't do til after admin commands
+        // checking for a category
         const categories = ['discuss', 'update_profile', 'customer_support'];
         const categorize = () => __awaiter(this, void 0, void 0, function* () {
             try {
-                const previous_messages = yield get_previous_messages(message, 6);
+                const previous_messages = yield get_previous_messages(message, 6, false);
                 // old jawn, still working
                 const category_response = yield openai.createCompletion({
                     model: 'text-davinci-003', temperature: 0.3,
@@ -219,6 +248,7 @@ function analyze_message(message) {
                 });
                 return category_response.data.choices[0].text.toLowerCase().replace(/\s/g, '');
                 // ! new jawn, not working
+                // const previous_messages = await get_previous_messages(message, 6, true)
                 /* let prompt: ChatCompletionRequestMessage[] = [
                   { role: 'system', content: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}.  Customer support is ONLY for people asking specifically about how the service works.` },
                   { role: 'system', name: 'example_user', content: 'text: I need help planning my day' },
@@ -264,7 +294,7 @@ function analyze_message(message) {
               { role: 'user', content: message.content! },
             ]
             const previous_messages = await get_previous_messages(message, 20)
-        
+         
             const completion = await openai.createChatCompletion({
               model: 'gpt-3.5-turbo', temperature: 0.3, max_tokens: 512, presence_penalty: 2.0, frequency_penalty: 2.0,
               messages: prompt.concat(previous_messages),
@@ -305,57 +335,74 @@ Be reassuring when replying to negative comments.
 Do not provide or mention links to the internet.
 
 A bio of the user is provided below for you to better understand who they are and empathize with them.`;
-        const reacted_messages = yield prisma.messages.findMany({
-            where: { number: message.number, reactions: { hasSome: ["Loved", "Emphasized"] } },
-            orderBy: { date: "desc" }, take: 10
-        });
-        const reacted_preceding_messages = yield Promise.all(reacted_messages.map((message) => __awaiter(this, void 0, void 0, function* () {
-            try {
-                return yield prisma.messages.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } });
-            }
-            catch (e) {
-                return message;
-            }
-        })));
-        let reacted_messages_array = reacted_preceding_messages.flatMap((value, index) => [value, reacted_messages[index]]);
-        const reacted_messages_examples = reacted_messages_array.map((message) => {
-            return {
-                role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user',
-                content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`
-            };
-        });
         const user = yield get_user(message.number);
-        let previous_messages = yield get_previous_messages(message, 20);
-        let prompt = [{ role: 'system', content: init_prompt }];
-        prompt = prompt.concat(reacted_messages_examples); // add reacted messages as examples
-        prompt = prompt.concat(previous_messages);
-        prompt = prompt.concat([{ role: 'user', content: message.content }]);
-        console.log(prompt);
-        const completion = yield openai.createChatCompletion({
-            model: 'gpt-3.5-turbo', temperature: 0.7, presence_penalty: 0.0, frequency_penalty: 1.0, max_tokens: 2048, messages: prompt,
-        });
-        let completion_string = completion.data.choices[0].message.content;
-        if (completion_string.includes('M]')) {
-            completion_string = completion_string.split('M] ')[1];
+        if (user) {
+            if (user.model != null) {
+                model = user.model;
+            }
+            if (user.temp != null) {
+                temp = user.temp.toNumber();
+            }
+            if (user.pres != null) {
+                pres = user.pres.toNumber();
+            }
+            if (user.freq != null) {
+                freq = user.freq.toNumber();
+            }
         }
-        yield send_message({ content: completion_string, number: message.number, tokens: message.tokens });
+        console.log(`model: ${model}, temp: ${temp}, pres: ${pres}, freq: ${freq}`);
+        if (model == 'chat') {
+            // get messages user reacted to with love or emphasize
+            const reacted_messages = yield prisma.messages.findMany({ where: { number: message.number, reactions: { hasSome: ["Loved", "Emphasized"] } }, orderBy: { date: "desc" }, take: 5 });
+            // get messages preceding reacted messages
+            const reacted_messages_prompts = yield Promise.all(reacted_messages.map((message) => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    return yield prisma.messages.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } });
+                }
+                catch (e) {
+                    return message;
+                }
+            })));
+            // combine prompts and messages
+            let reacted_messages_array = reacted_messages_prompts.flatMap((value, index) => [value, reacted_messages[index]]);
+            const reacted_messages_examples = reacted_messages_array.map((message) => { return { role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user', content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}` }; });
+            let previous_messages = yield get_previous_messages(message, 20, true);
+            const previous_messages_array = previous_messages.map((message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}` }; });
+            let prompt = [{ role: 'system', content: init_prompt }];
+            prompt = prompt.concat(reacted_messages_examples); // add reacted messages as examples
+            prompt = prompt.concat(previous_messages_array);
+            prompt = prompt.concat([{ role: 'user', content: message.content }]);
+            console.log(prompt);
+            const completion = yield openai.createChatCompletion({
+                model: 'gpt-3.5-turbo', temperature: temp, presence_penalty: pres, frequency_penalty: freq, max_tokens: 2048, messages: prompt,
+            });
+            let completion_string = completion.data.choices[0].message.content;
+            if (completion_string.includes('M]')) {
+                completion_string = completion_string.split('M] ')[1];
+            }
+            yield send_message({ content: completion_string, number: message.number, tokens: message.tokens });
+        }
+        else if (model == 'text') {
+            const previous_messages = yield get_previous_messages(message, 10, false);
+            console.log('text model message');
+            let prompt = `${init_prompt}\n${user.bio}\n###\n${previous_messages}\n[${new Date().toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true })}] Journal:`;
+            const previous_messages_string = previous_messages.map((message) => { return `\n[${message.date ? message.date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true }) : null}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}`; }).join('');
+            let openAIResponse = yield openai.createCompletion({
+                model: 'text-davinci-003', prompt: prompt,
+                max_tokens: 512, temperature: temp, presence_penalty: pres, frequency_penalty: freq,
+            });
+            send_message({ content: openAIResponse.data.choices[0].text, number: message.number, tokens: message.tokens });
+        }
     });
 }
-function get_previous_messages(message, amount = 14) {
+function get_previous_messages(message, amount = 14, chat) {
     return __awaiter(this, void 0, void 0, function* () {
         // TODO not ideal cuz parses EVERY message from that number lol
         const resetMessage = yield prisma.messages.findFirst({ where: { number: message.number, content: 'reset' }, orderBy: { id: 'desc' } });
         let resetMessageLoc;
         resetMessage === null ? resetMessageLoc = 0 : resetMessageLoc = resetMessage.id;
         let previous_messages = yield prisma.messages.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount });
-        previous_messages = previous_messages.reverse();
-        const previous_messages_array = previous_messages.map((message) => {
-            return {
-                role: message.is_outbound ? "assistant" : "user",
-                content: `[${message.date.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "numeric", hour12: true, })}] ${message.content}`
-            };
-        });
-        return previous_messages_array;
+        return previous_messages.reverse();
     });
 }
 // ======================================================================================
