@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//macOS 12.6//EN
+N:;;;;
+FN:jrnl
+ORG:jrnl;
+TEL;type=pref:+14089103311
+X-ABShowAs:COMPANY
+END:VCARD

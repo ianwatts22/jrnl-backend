@@ -1,0 +1,8 @@
+Below is a message from the user along with their bio. We believe they want to view their existing bio or update it. First determine their intent (view or update), then return either their existing or updated bio. If their bio is blank, put "empty". Previous messages are included which may help. Condense the information, remove extraneous words. Replace many words with few. Group relevant information. Separate disparate information with new lines. Format the bio like the following example, extracting the key words from the message.
+###
+Example bio:
+- from Los Angeles
+- studied mechanical engineering
+- polymath
+###
+Respond in the following format: <view or update>:<bio>

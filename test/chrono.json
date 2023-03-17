@@ -1,0 +1,42 @@
+[
+  {
+    "reference": {
+      "instant": "2023-03-11T22:40:12.356Z"
+    },
+    "refDate": "2023-03-11T22:40:12.356Z",
+    "index": 18,
+    "text": "Sep 12-13",
+    "start": {
+      "reference": {
+        "instant": "2023-03-11T22:40:12.356Z"
+      },
+      "knownValues": {
+        "day": 12,
+        "month": 9
+      },
+      "impliedValues": {
+        "year": 2022,
+        "hour": 12,
+        "minute": 0,
+        "second": 0,
+        "millisecond": 0
+      }
+    },
+    "end": {
+      "reference": {
+        "instant": "2023-03-11T22:40:12.356Z"
+      },
+      "knownValues": {
+        "day": 13,
+        "month": 9
+      },
+      "impliedValues": {
+        "year": 2022,
+        "hour": 12,
+        "minute": 0,
+        "second": 0,
+        "millisecond": 0
+      }
+    }
+  }
+]

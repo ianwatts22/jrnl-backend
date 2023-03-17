@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,33 +7,78 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model users {
-  number      String    @id
-  timezone    String?
-  most_recent DateTime? @db.Timestamptz
-  bio         String    @default("blank")
-  model       String?
-  temp        Decimal?  @db.Decimal(3, 2)
-  pres        Decimal?  @db.Decimal(3, 2)
-  freq        Decimal?  @db.Decimal(3, 2)
+model User {
+  number   String  @id
+  timezone String?
+  bio      String  @default("blank")
+  freq     Float?
+  pres     Float?
+  temp     Float?
+  model    String?
 }
 
-model messages {
-  id              Int       @id @default(autoincrement())
+enum Timezone {
+  PST
+  MST
+  CST
+  EST
+}
+
+model Message {
+  id              Int         @id @default(autoincrement())
   content         String?
   media_url       String?
   is_outbound     Boolean?
-  date            DateTime? @db.Timestamptz
-  number          String?
-  was_downgraded  Boolean?  @default(false)
+  date            DateTime    @db.Timestamptz(6)
+  number          String
+  was_downgraded  Boolean?    @default(false)
+  send_style      SendStyle?
+  human           Boolean?
+  reactions       Reactions[]
+  type            Type?
   tokens          Int?
-  send_style      String?
   keywords        String[]
-  type            String?
-  group_id        Int?
   relevance       Int?
-  reactions       String[]
+  group_id        Int?
   content_letters String?
-  // reactions      messages[]
-  // messages       messages?  @relation(fields: [messagesId], references: [id])
+  response_time   Float?
+  model           String?
+  hour            Int?
+}
+
+enum Type {
+  discuss
+  announcement
+  question
+  summary
+  help
+  reset
+  update_profile
+  customer_support
+  quote
+}
+
+enum Reactions {
+  Loved
+  Liked
+  Disliked
+  Laughed
+  Emphasized
+  Questioned
+}
+
+enum SendStyle {
+  celebration
+  shooting_star
+  fireworks
+  lasers
+  love
+  confetti
+  balloons
+  spotlight
+  echo
+  invisible
+  gentle
+  loud
+  slam
 }
