@@ -141,13 +141,15 @@ const daily_quotes = new cron_1.default.CronJob('55 */1 * * *', () => __awaiter(
         }
     }));
 }));
+daily_quotes.start();
 const gratitude_journal = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
-        if (10 == new Date().getHours() - 7 + timezones.indexOf(user.timezone)) {
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: '', number: user.number }));
+        if (8 == new Date().getHours() - 7 + timezones.indexOf(user.timezone)) {
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: `What are three things you're grateful for?`, number: user.number }));
         }
     }));
 }));
+gratitude_journal.start();
 // every Sunday at 9pm local
 const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
@@ -162,9 +164,7 @@ const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(v
         yield send_message(Object.assign(Object.assign({}, default_message), { content: response, number: user.number, response_time: current_hour }));
     }));
 }));
-daily_quotes.start();
 weekly_summary.start();
-gratitude_journal.start();
 let users;
 local_data();
 function local_data() {
@@ -390,12 +390,12 @@ function log_time(time) {
 function test() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
+            const chrono_output = chrono.parse('5pm to 7pm');
+            // console.log(chrono_output[0])
         }
         catch (e) {
             error_alert(e);
         }
-        const chrono_output = chrono.parse('5pm to 7pm');
-        // console.log(chrono_output[0])
     });
 }
 function summarize(text) {

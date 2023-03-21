@@ -96,14 +96,16 @@ const daily_quotes = new cron.CronJob('55 */1 * * *', async () => {
     }
   })
 })
+daily_quotes.start()
 
 const gratitude_journal = new cron.CronJob('0 */1 * * *', async () => {
   users.forEach(async user => {
-    if (10 == new Date().getHours() - 7 + timezones.indexOf(user.timezone!)) {
-      await send_message({ ...default_message, content: '', number: user.number })
+    if (8 == new Date().getHours() - 7 + timezones.indexOf(user.timezone!)) {
+      await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
     }
   })
 })
+gratitude_journal.start()
 
 // every Sunday at 9pm local
 const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
@@ -120,9 +122,7 @@ const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
     await send_message({ ...default_message, content: response, number: user.number, response_time: current_hour })
   })
 })
-daily_quotes.start()
 weekly_summary.start()
-gratitude_journal.start()
 
 let users: User[]
 local_data()
@@ -325,11 +325,9 @@ async function log_time(time: number) {
 // test()
 async function test() {
   try {
-    
+    const chrono_output = chrono.parse('5pm to 7pm')
+    // console.log(chrono_output[0])
   } catch (e) { error_alert(e) }
-
-  const chrono_output = chrono.parse('5pm to 7pm')
-  // console.log(chrono_output[0])
 }
 
 async function summarize(text: String) {
