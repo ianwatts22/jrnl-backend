@@ -1,5 +1,5 @@
 require('dotenv').config()
-import { Message, User, Prisma, PrismaClient, SendStyle, Reactions, Type, Timezone } from '@prisma/client'
+import { Prisma, PrismaClient, Message, SendStyle, Reactions, Type, User, Timezone, Words, WordsType } from '@prisma/client'
 import { Client, ClientConfig } from 'pg'
 import Sendblue from 'sendblue'
 import express from 'express'
@@ -16,8 +16,8 @@ import { quotes, get_quote } from './other_data/quotes'
 const app = express(), sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!), configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
 const openai = new OpenAIApi(configuration)
 
-let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com'; const PORT = Number(process.env.PORT)
-if (os.hostname().split('.').pop() === 'local') hostname = '127.0.0.1', link = process.env.NGROK!
+let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com', local = false; const PORT = Number(process.env.PORT)
+if (os.hostname().split('.').pop() === 'local') hostname = '127.0.0.1', link = process.env.NGROK!, local = true
 app.listen(PORT, hostname, () => { console.log(`server at http://${hostname}:${PORT}/`) })
 app.use(express.static('public')); app.use(express.urlencoded({ extended: true }))
 app.use(bodyParser.json()); app.use(morgan('dev')); app.use('/assets', express.static('assets'));
@@ -88,15 +88,29 @@ const sendblue_callback = `${link}/message-status`
 // ======================================CRON, CACHE=====================================
 // ======================================================================================
 
-const timezones = Object.values(Timezone), current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
+const timezones = Object.values(Timezone)
+let current_hour: number
+local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
 const daily_quotes = new cron.CronJob('55 */1 * * *', async () => {
   users.forEach(async user => {
     if ([9, 21].includes(current_hour + timezones.indexOf(user.timezone!))) {
       await send_message({ ...default_message, content: get_quote(), number: user.number, response_time: current_hour })
     }
   })
+  console.log(`CRON current hour: ${current_hour}`)
+  await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' })
 })
 daily_quotes.start()
+
+interface Question { question: string, time: Date }
+let admin_question: Question[] = []
+const admin_prompt = new cron.CronJob('* */1 * * *', async () => {
+  admin_question.forEach(async question => {
+    if (question.time.getHours() - 7 == current_hour) {
+      await send_message({ ...default_message, content: question.question, number: '+13104974985' }, /* users */)
+    }
+  })
+})
 
 const gratitude_journal = new cron.CronJob('0 */1 * * *', async () => {
   users.forEach(async user => {
@@ -111,9 +125,11 @@ gratitude_journal.start()
 const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
   users.forEach(async (user: User) => {
     const last_week_messages = await prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } })
-    if (21 == current_hour + timezones.indexOf(user.timezone!)) { }
-    const last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
-
+    if (last_week_messages.length < 5) send_message({ ...default_message, content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number })
+    if (21 == current_hour + timezones.indexOf(user.timezone!)) {  }
+    let last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
+    // TODO add token max catch
+    last_week_messages_string.split('').length*3/4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048*3/4) : last_week_messages_string
     const openAIResponse = await openai.createCompletion({
       model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
       prompt: `${fs.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
@@ -130,7 +146,8 @@ async function local_data() {
   try {
     users = await prisma.user.findMany()
     Watts = await prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = await prisma.user.findUnique({ where: { number: '+12015190240' } })
-    if (Watts && Pulice) admins = [ Watts, Pulice ], admin_numbers = admins.map(admin => admin.number)
+    if (Watts && Pulice) admins = [Watts, Pulice], admin_numbers = admins.map(admin => admin.number)
+    console.log(`START current hour: ${current_hour}`)
   } catch (e) { console.log(e) }
 }
 
@@ -146,13 +163,10 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
     const t0 = Date.now()
     const response_message: Prisma.MessageCreateInput = { ...default_message, number: message.number }
     if (!message.content || !message.number) { return }
-    if (message.content.toLowerCase() === 'reset') {
-      message.type = 'reset'
-      log_message({ ...message, type: Type.reset }); return
-    }
-
+    if (message.content.toLowerCase() === 'reset') { log_message({ ...message, type: Type.reset }); return }
     let user = await prisma.user.findFirst({ where: { number: message.number } })
     if (!user) { error_alert(`user not found: ${message.number}`); return }
+
     const previous_messages = await get_previous_messages(message, 8, false)
     user.freq = freq_defualt; user.pres = pres_default; user.temp = temp_default; user.model = model_default
     console.log(`${log_time(message.response_time)} - user`)
@@ -173,7 +187,14 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
     if (message.content.toLowerCase().startsWith('admin:') && admins.includes(user)) {
       console.log(`${log_time(message.response_time)} - admin`)
       await send_message({ ...default_message, content: message.content.split(':').pop()!, media_url: message.media_url, type: Type.question }, users); return
+    } else if (message.content.toLowerCase().startsWith('question:') && admin_numbers.includes(user.number)) {
+      console.log('QUESTION ADDED')
+      const start_date = chrono.parse(message.content.split(': ', 2).pop()!.split('@')[1])[0].start.date()
+      admin_question.push({ question: message.content.split(': ', 2).pop()!.split('@')[0], time: start_date })
+      console.log('admin question ' + JSON.stringify(admin_question))
+      return
     }
+    console.log(admin_question)
 
     await log_message(message)    // wait til after admin commands
 
@@ -271,7 +292,7 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
       if (!response_values) { return }
       let user_update = prisma.user.update({ where: { number: message.number! }, data: { model: response_values[0], temp: response_values[1], freq: response_values[2], pres: response_values[3] } }) */
     }
-    console.log(`$${log_time(message.response_time)} - analyze_message`)
+    console.log(`${log_time(message.response_time)} - analyze_message`)
   } catch (e) { error_alert(` ! analyze_message (${message.number}): ${e}`) }
 }
 
@@ -309,25 +330,32 @@ async function send_message(message: Prisma.MessageCreateInput, users?: User[]) 
 // ======================================================================================
 
 async function error_alert(error: any, message?: Message) {
-  await send_message({ ...default_message, content: `ERROR: ${error}`, number: admins.toString() })
+  await send_message({ ...default_message, content: `ERROR: ${error}`, number: '+13104974985' })
   console.error(`ERROR: ${error}`)
   if (message) await send_message({ ...default_message, content: `Sorry bugged out, try again.`, number: message.number })
 }
 
-async function log_time(time: number) {
-  return `${((new Date().valueOf() - time)/1000).toFixed(1)}sec`
-}
+const log_time = (time: number) => `${((new Date().valueOf() - time) / 1000).toFixed(1)}sec`
+
 
 // ======================================================================================
 // ========================================TESTING=======================================
 // ======================================================================================
 
-// test()
-async function test() {
+const test_message: Prisma.MessageCreateInput = { ...default_message, number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' }
+// test(test_message)
+async function test(message?: Prisma.MessageCreateInput) {
   try {
-    const chrono_output = chrono.parse('5pm to 7pm')
-    // console.log(chrono_output[0])
-  } catch (e) { error_alert(e) }
+    if (!message) return
+    console.log(message.content!.split(': ', 2)[0])
+    console.log(message.content!.split(': ', 2)[1])
+    const start_date = chrono.parse(message.content!.split(': ', 2).pop()!.split('@')[1])[0].start.date()
+    admin_question.push({ question: message.content!.split(': ', 2).pop()!.split('@')[0], time: start_date })
+    admin_question.push({ question: 'klakakak', time: chrono.parse('6pm')[0].start.date() })
+    // console.log('admin question ' + JSON.stringify(admin_question))
+    // const chrono_output = chrono.parse('11:30pm')
+    // console.log(chrono_output[0].start.date())
+  } catch (e) { /* error_alert(e) */ }
 }
 
 async function summarize(text: String) {

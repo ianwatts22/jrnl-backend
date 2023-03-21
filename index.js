@@ -50,10 +50,10 @@ const chrono = __importStar(require("chrono-node"));
 const quotes_1 = require("./other_data/quotes");
 const app = (0, express_1.default)(), sendblue = new sendblue_1.default(process.env.SENDBLUE_API_KEY, process.env.SENDBLUE_API_SECRET), configuration = new openai_1.Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, });
 const openai = new openai_1.OpenAIApi(configuration);
-let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com';
+let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com', local = false;
 const PORT = Number(process.env.PORT);
 if (os_1.default.hostname().split('.').pop() === 'local')
-    hostname = '127.0.0.1', link = process.env.NGROK;
+    hostname = '127.0.0.1', link = process.env.NGROK, local = true;
 app.listen(PORT, hostname, () => { console.log(`server at http://${hostname}:${PORT}/`); });
 app.use(express_1.default.static('public'));
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -133,15 +133,27 @@ const sendblue_callback = `${link}/message-status`;
 // ======================================================================================
 // ======================================CRON, CACHE=====================================
 // ======================================================================================
-const timezones = Object.values(client_1.Timezone), current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
+const timezones = Object.values(client_1.Timezone);
+let current_hour;
+local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
 const daily_quotes = new cron_1.default.CronJob('55 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
         if ([9, 21].includes(current_hour + timezones.indexOf(user.timezone))) {
             yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number, response_time: current_hour }));
         }
     }));
+    console.log(`CRON current hour: ${current_hour}`);
+    yield send_message(Object.assign(Object.assign({}, default_message), { content: `current hour: ${current_hour}`, number: '+13104974985' }));
 }));
 daily_quotes.start();
+let admin_question = [];
+const admin_prompt = new cron_1.default.CronJob('* */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    admin_question.forEach((question) => __awaiter(void 0, void 0, void 0, function* () {
+        if (question.time.getHours() - 7 == current_hour) {
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: question.question, number: '+13104974985' }));
+        }
+    }));
+}));
 const gratitude_journal = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
         if (8 == new Date().getHours() - 7 + timezones.indexOf(user.timezone)) {
@@ -154,8 +166,12 @@ gratitude_journal.start();
 const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
         const last_week_messages = yield prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } });
+        if (last_week_messages.length < 5)
+            send_message(Object.assign(Object.assign({}, default_message), { content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number }));
         if (21 == current_hour + timezones.indexOf(user.timezone)) { }
-        const last_week_messages_string = last_week_messages.map((message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}`; }).join('');
+        let last_week_messages_string = last_week_messages.map((message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}`; }).join('');
+        // TODO add token max catch
+        last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string;
         const openAIResponse = yield openai.createCompletion({
             model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
             prompt: `${fs_1.default.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
@@ -174,6 +190,7 @@ function local_data() {
             Watts = yield prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = yield prisma.user.findUnique({ where: { number: '+12015190240' } });
             if (Watts && Pulice)
                 admins = [Watts, Pulice], admin_numbers = admins.map(admin => admin.number);
+            console.log(`START current hour: ${current_hour}`);
         }
         catch (e) {
             console.log(e);
@@ -194,7 +211,6 @@ function analyze_message(message) {
                 return;
             }
             if (message.content.toLowerCase() === 'reset') {
-                message.type = 'reset';
                 log_message(Object.assign(Object.assign({}, message), { type: client_1.Type.reset }));
                 return;
             }
@@ -226,6 +242,14 @@ function analyze_message(message) {
                 yield send_message(Object.assign(Object.assign({}, default_message), { content: message.content.split(':').pop(), media_url: message.media_url, type: client_1.Type.question }), users);
                 return;
             }
+            else if (message.content.toLowerCase().startsWith('question:') && admin_numbers.includes(user.number)) {
+                console.log('QUESTION ADDED');
+                const start_date = chrono.parse(message.content.split(': ', 2).pop().split('@')[1])[0].start.date();
+                admin_question.push({ question: message.content.split(': ', 2).pop().split('@')[0], time: start_date });
+                console.log('admin question ' + JSON.stringify(admin_question));
+                return;
+            }
+            console.log(admin_question);
             yield log_message(message); // wait til after admin commands
             // categorize message
             const categories = Object.values(client_1.Type);
@@ -325,7 +349,7 @@ function analyze_message(message) {
                 if (!response_values) { return }
                 let user_update = prisma.user.update({ where: { number: message.number! }, data: { model: response_values[0], temp: response_values[1], freq: response_values[2], pres: response_values[3] } }) */
             }
-            console.log(`$${log_time(message.response_time)} - analyze_message`);
+            console.log(`${log_time(message.response_time)} - analyze_message`);
         }
         catch (e) {
             error_alert(` ! analyze_message (${message.number}): ${e}`);
@@ -372,30 +396,33 @@ function send_message(message, users) {
 // ======================================================================================
 function error_alert(error, message) {
     return __awaiter(this, void 0, void 0, function* () {
-        yield send_message(Object.assign(Object.assign({}, default_message), { content: `ERROR: ${error}`, number: admins.toString() }));
+        yield send_message(Object.assign(Object.assign({}, default_message), { content: `ERROR: ${error}`, number: '+13104974985' }));
         console.error(`ERROR: ${error}`);
         if (message)
             yield send_message(Object.assign(Object.assign({}, default_message), { content: `Sorry bugged out, try again.`, number: message.number }));
     });
 }
-function log_time(time) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return `${((new Date().valueOf() - time) / 1000).toFixed(1)}sec`;
-    });
-}
+const log_time = (time) => `${((new Date().valueOf() - time) / 1000).toFixed(1)}sec`;
 // ======================================================================================
 // ========================================TESTING=======================================
 // ======================================================================================
-// test()
-function test() {
+const test_message = Object.assign(Object.assign({}, default_message), { number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' });
+// test(test_message)
+function test(message) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const chrono_output = chrono.parse('5pm to 7pm');
-            // console.log(chrono_output[0])
+            if (!message)
+                return;
+            console.log(message.content.split(': ', 2)[0]);
+            console.log(message.content.split(': ', 2)[1]);
+            const start_date = chrono.parse(message.content.split(': ', 2).pop().split('@')[1])[0].start.date();
+            admin_question.push({ question: message.content.split(': ', 2).pop().split('@')[0], time: start_date });
+            admin_question.push({ question: 'klakakak', time: chrono.parse('6pm')[0].start.date() });
+            // console.log('admin question ' + JSON.stringify(admin_question))
+            // const chrono_output = chrono.parse('11:30pm')
+            // console.log(chrono_output[0].start.date())
         }
-        catch (e) {
-            error_alert(e);
-        }
+        catch (e) { /* error_alert(e) */ }
     });
 }
 function summarize(text) {

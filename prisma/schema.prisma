@@ -86,3 +86,16 @@ enum SendStyle {
   loud
   slam
 }
+
+model Words {
+  id    Int       @id @default(autoincrement())
+  words String
+  date  DateTime  @db.Timestamptz(6)
+  type  WordsType
+}
+
+enum WordsType {
+  quote
+  question
+  idea
+}
