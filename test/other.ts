@@ -12,6 +12,27 @@
   if (user?.freq != null) freq = user.freq.toNumber()
 } */
 
+/*  // ADJUST WEIGHTS
+ else if (message.content.startsWith('w:') && admins.includes(user)) {
+  let values = message.content.split('w:')[1], weights = values.split(',').map(str => Number(str))
+  if (values == 'reset') temp = null, pres = null, freq = null
+  else temp = weights[0], pres = weights[1], freq = weights[2]
+
+  await sendblue.sendMessage({ content: `weights updated from (temp,pres,freq) = (${user.temp},${user.pres},${user.freq}) to (${temp},${pres},${freq})`, number: message.number, status_callback: sendblue_callback }) // don't log the message
+  await prisma.user.update({ where: { number: message.number }, data: { temp, pres, freq } })
+  return
+} // ADJUST MODEL
+else if (message.content.startsWith('m:') && admins.includes(user)) {
+  let model = message.content.split('m:')[1]
+  if (model == 'chat' || model == 'text' || model == 'rapid') {
+    await prisma.user.update({ where: { number: message.number }, data: { model } })
+    await sendblue.sendMessage({ content: `${model} activated\nweights (temp,pres,freq) = ${user.temp}, ${user.pres}, ${user.freq}\ndefault weights = ${temp}, ${pres}, ${freq}`, number: message.number, status_callback: sendblue_callback })
+    return
+  }
+  await sendblue.sendMessage({ content: `think your formatting's wrong, try 'm:chat', 'm:text', 'm:rapid'`, number: message.number, status_callback: sendblue_callback })
+  return
+} */
+
 // ! CHAT
 /* if (model == 'chat') {
   // get messages user reacted to with love or emphasize
@@ -103,8 +124,8 @@
 //   console.log(parsed_date)
 // }
 
-// // GPT Prisma query generation
-async function test_openAI_query(message: string) {
+// GPT Prisma query generation
+/* async function test_openAI_query(message: string) {
   // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
   const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
   Prompt: ${message}
@@ -134,15 +155,15 @@ async function test_openAI_query(message: string) {
 
     const query = await prisma.messages.findMany({ where: where, orderBy: { relevance: "desc", }, take: 10, })
   } catch (e) { error_alert(e) }
-}
+} */
 
 // ========================================================================================
 // ========================================OTHER+==========================================
 // ========================================================================================
 
 // ! QUOTE TXT TO ARRAY
-const quotesText = fs.readFileSync('other/quotes.txt', 'utf8');
+/* const quotesText = fs.readFileSync('other/quotes.txt', 'utf8');
 const quotesArray = quotesText.split('\n\n').map((quote) => quote.trim());
 const quotesWrappedAndIndented = quotesArray.map((quote) => `\`${quote.replace(/\n\s+/g, '\n')}\``).join(', ');
 
-console.log(quotesWrappedAndIndented);
+console.log(quotesWrappedAndIndented); */

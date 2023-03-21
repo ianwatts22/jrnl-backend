@@ -2,21 +2,32 @@
 // ========================================================================================
 // =======================================CHAT=============================================
 // ========================================================================================
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 // ! adjust model
 /* async function model_adjust(message: Message, user: User) {
   if (user?.model != null) model = user.model
   if (user?.temp != null) temp = user.temp.toNumber()
   if (user?.pres != null) pres = user.pres.toNumber()
   if (user?.freq != null) freq = user.freq.toNumber()
+} */
+/*  // ADJUST WEIGHTS
+ else if (message.content.startsWith('w:') && admins.includes(user)) {
+  let values = message.content.split('w:')[1], weights = values.split(',').map(str => Number(str))
+  if (values == 'reset') temp = null, pres = null, freq = null
+  else temp = weights[0], pres = weights[1], freq = weights[2]
+
+  await sendblue.sendMessage({ content: `weights updated from (temp,pres,freq) = (${user.temp},${user.pres},${user.freq}) to (${temp},${pres},${freq})`, number: message.number, status_callback: sendblue_callback }) // don't log the message
+  await prisma.user.update({ where: { number: message.number }, data: { temp, pres, freq } })
+  return
+} // ADJUST MODEL
+else if (message.content.startsWith('m:') && admins.includes(user)) {
+  let model = message.content.split('m:')[1]
+  if (model == 'chat' || model == 'text' || model == 'rapid') {
+    await prisma.user.update({ where: { number: message.number }, data: { model } })
+    await sendblue.sendMessage({ content: `${model} activated\nweights (temp,pres,freq) = ${user.temp}, ${user.pres}, ${user.freq}\ndefault weights = ${temp}, ${pres}, ${freq}`, number: message.number, status_callback: sendblue_callback })
+    return
+  }
+  await sendblue.sendMessage({ content: `think your formatting's wrong, try 'm:chat', 'm:text', 'm:rapid'`, number: message.number, status_callback: sendblue_callback })
+  return
 } */
 // ! CHAT
 /* if (model == 'chat') {
@@ -102,14 +113,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 //   const parsed_date = chrono.parseDate('july')
 //   console.log(parsed_date)
 // }
-// // GPT Prisma query generation
-function test_openAI_query(message) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
-        const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
+// GPT Prisma query generation
+/* async function test_openAI_query(message: string) {
+  // https://platform.openai.com/playground/p/gs3gMaELFtvzh0Jdcg7fT2A5?model=text-davinci-003
+  const extract_dates_prompt = `Extract the beginning and end times from the prompt below to help derive a search query. Do not modify the text, extract it as it is.
   Prompt: ${message}
-  t0, t1: `;
-        const query_prompt = `// You are a super-intelligent AI creating queries. Below is the shape of data for a message. Create a single Prisma ORM query based off the following prompt. Finish after the "const where" statement
+  t0, t1: `
+
+  const query_prompt = `// You are a super-intelligent AI creating queries. Below is the shape of data for a message. Create a single Prisma ORM query based off the following prompt. Finish after the "const where" statement
   model messages {
     content        String?
     media_url      String?
@@ -119,27 +130,27 @@ function test_openAI_query(message) {
     keywords       String[]
     type           String?
     relevance      Int?
-  }`;
-        try {
-            const extract_dates = yield openai.createCompletion({ model: 'text-davinci-003', prompt: extract_dates_prompt, max_tokens: 64, temperature: 0.3 });
-            const query_text = yield openai.createCompletion({
-                model: 'code-davinci-002', prompt: query_prompt, max_tokens: 128,
-                temperature: 0.5, frequency_penalty: 0, presence_penalty: 0,
-                stop: ['//'],
-            });
-            const where = JSON.parse(query_text.data.choices[0].text); //turn string into object to pass into Prisma query
-            const query = yield prisma.messages.findMany({ where: where, orderBy: { relevance: "desc", }, take: 10, });
-        }
-        catch (e) {
-            error_alert(e);
-        }
-    });
-}
+  }`
+
+  try {
+    const extract_dates = await openai.createCompletion({ model: 'text-davinci-003', prompt: extract_dates_prompt, max_tokens: 64, temperature: 0.3 })
+
+    const query_text = await openai.createCompletion({
+      model: 'code-davinci-002', prompt: query_prompt, max_tokens: 128,
+      temperature: 0.5, frequency_penalty: 0, presence_penalty: 0,
+      stop: ['//'],
+    })
+    const where: Object = JSON.parse(query_text.data.choices[0].text!)  //turn string into object to pass into Prisma query
+
+    const query = await prisma.messages.findMany({ where: where, orderBy: { relevance: "desc", }, take: 10, })
+  } catch (e) { error_alert(e) }
+} */
 // ========================================================================================
 // ========================================OTHER+==========================================
 // ========================================================================================
 // ! QUOTE TXT TO ARRAY
-const quotesText = fs.readFileSync('other/quotes.txt', 'utf8');
+/* const quotesText = fs.readFileSync('other/quotes.txt', 'utf8');
 const quotesArray = quotesText.split('\n\n').map((quote) => quote.trim());
 const quotesWrappedAndIndented = quotesArray.map((quote) => `\`${quote.replace(/\n\s+/g, '\n')}\``).join(', ');
-console.log(quotesWrappedAndIndented);
+
+console.log(quotesWrappedAndIndented); */

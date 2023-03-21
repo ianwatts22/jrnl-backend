@@ -8,13 +8,15 @@ datasource db {
 }
 
 model User {
-  number   String  @id
-  timezone String?
-  bio      String  @default("blank")
-  freq     Float?
-  pres     Float?
-  temp     Float?
-  model    String?
+  number     String   @id
+  timezone   Timezone
+  bio        String   @default("blank")
+  directive  String   @default("")
+  freq       Float?
+  pres       Float?
+  temp       Float?
+  model      String?
+  principles String?  @default("blank")
 }
 
 enum Timezone {
@@ -41,7 +43,7 @@ model Message {
   relevance       Int?
   group_id        Int?
   content_letters String?
-  response_time   Float?
+  response_time   Float
   model           String?
   hour            Int?
 }
@@ -53,9 +55,11 @@ enum Type {
   summary
   help
   reset
+  model
   update_profile
   customer_support
   quote
+  advice
 }
 
 enum Reactions {

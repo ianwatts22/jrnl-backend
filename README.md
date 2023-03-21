@@ -2,9 +2,12 @@
 
 ## ChatGPT prompt
 
-- background: I'm building an iMessage journaling chatbot service called "jrnl". It is meant to make it easier for people to journal by providing a conversational interface.
-- tech stack: Typescript Node.js with Express, PostrgreSQL database with Prisma for ORM, Stripe for payments, Sendblue for messaging through iMessage, Tally for forms/signup. Other packages: Axios, Morgan, body-parser. Web app and database hosted on Render.com. Stripe data syncs to the database automatically.
-- experience: I am relatively new to web apps and backend, though have been programming for many years
+Project: iMessage journaling chatbot service called "jrnl". It is meant to make it easier for people to journal by providing a conversational interface.
+Technology: Typescript Node.js app using Express and Axios, Sendblue API for texting, Tally.so for signup form, Prisma for ORM with PostreSQL database, web service and database hosted on Render.com, Stripe for payments (syncs to db automatically)
+Experience: Been developing web apps for a few months. Have done multiple projects with this stack.
+Principles: Simplicity, speed, ease of use, deep connection, privacy.
+
+###
 
 ## tech stack
 
