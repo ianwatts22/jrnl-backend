@@ -15,8 +15,14 @@ model User {
   freq       Float?
   pres       Float?
   temp       Float?
-  model      String?
+  model      Model?   @default(text)
+  prompt     String?  @default("default")
   principles String?  @default("blank")
+}
+
+enum Model {
+  text
+  chat
 }
 
 enum Timezone {

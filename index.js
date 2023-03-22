@@ -48,6 +48,7 @@ const os_1 = __importDefault(require("os"));
 const fs_1 = __importDefault(require("fs"));
 const chrono = __importStar(require("chrono-node"));
 const quotes_1 = require("./other_data/quotes");
+const cloudinary_1 = require("cloudinary");
 const app = (0, express_1.default)(), sendblue = new sendblue_1.default(process.env.SENDBLUE_API_KEY, process.env.SENDBLUE_API_SECRET), configuration = new openai_1.Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, });
 const openai = new openai_1.OpenAIApi(configuration);
 let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com', local = false;
@@ -60,6 +61,7 @@ app.use(express_1.default.urlencoded({ extended: true }));
 app.use(body_parser_1.default.json());
 app.use((0, morgan_1.default)('dev'));
 app.use('/assets', express_1.default.static('assets'));
+cloudinary_1.v2.config({ cloud_name: 'dpxdjc7qy', api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET, secure: true });
 // ========================================================================================
 // ========================================DATABASE========================================
 // ========================================================================================
@@ -135,33 +137,31 @@ const sendblue_callback = `${link}/message-status`;
 // ======================================================================================
 const timezones = Object.values(client_1.Timezone);
 let current_hour;
+console.log(new Date().toUTCString());
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
-const daily_quotes = new cron_1.default.CronJob('55 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
-        if ([9, 21].includes(current_hour + timezones.indexOf(user.timezone))) {
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number, response_time: current_hour }));
-        }
+        if ([21].includes(current_hour + timezones.indexOf(user.timezone)))
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number }));
+        if ([8].includes(current_hour + timezones.indexOf(user.timezone)))
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: `What are three things you're grateful for?`, number: user.number }));
     }));
     console.log(`CRON current hour: ${current_hour}`);
-    yield send_message(Object.assign(Object.assign({}, default_message), { content: `current hour: ${current_hour}`, number: '+13104974985' }));
+    yield send_message(Object.assign(Object.assign({}, default_message), { content: `current hour: ${current_hour}`, number: '+13104974985' }), undefined, true);
 }));
-daily_quotes.start();
-let admin_question = [];
-const admin_prompt = new cron_1.default.CronJob('* */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+timezone_adjusted.start();
+let admin_question = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }];
+const admin_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('every minute cron');
     admin_question.forEach((question) => __awaiter(void 0, void 0, void 0, function* () {
-        if (question.time.getHours() - 7 == current_hour) {
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: question.question, number: '+13104974985' }));
+        console.log('question time ' + (question.time.getHours()));
+        console.log('current hour ' + (current_hour));
+        if (question.time.getHours() == current_hour) {
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: question.question }), users);
         }
     }));
 }));
-const gratitude_journal = new cron_1.default.CronJob('0 */1 * * *', () => __awaiter(void 0, void 0, void 0, function* () {
-    users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
-        if (8 == new Date().getHours() - 7 + timezones.indexOf(user.timezone)) {
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: `What are three things you're grateful for?`, number: user.number }));
-        }
-    }));
-}));
-gratitude_journal.start();
+admin_prompt.start();
 // every Sunday at 9pm local
 const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
@@ -173,7 +173,7 @@ const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(v
         // TODO add token max catch
         last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string;
         const openAIResponse = yield openai.createCompletion({
-            model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
+            model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 512,
             prompt: `${fs_1.default.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
         });
         const response = openAIResponse.data.choices[0].text;
@@ -190,7 +190,8 @@ function local_data() {
             Watts = yield prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = yield prisma.user.findUnique({ where: { number: '+12015190240' } });
             if (Watts && Pulice)
                 admins = [Watts, Pulice], admin_numbers = admins.map(admin => admin.number);
-            console.log(`START current hour: ${current_hour}`);
+            console.log('START question time ' + (admin_question[0].time.getHours()));
+            console.log('START current hour ' + (current_hour));
         }
         catch (e) {
             console.log(e);
@@ -200,13 +201,11 @@ function local_data() {
 // ======================================================================================
 // ========================================FUNCTIONS=====================================
 // ======================================================================================
-const temp_default = 0.9, pres_default = 1.0, freq_defualt = 1.0, model_default = 'text';
-let temp = temp_default, pres = pres_default, freq = freq_defualt, model = model_default;
 function analyze_message(message) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const t0 = Date.now();
-            const response_message = Object.assign(Object.assign({}, default_message), { number: message.number });
+            const default_response = Object.assign(Object.assign({}, default_message), { number: message.number });
             if (!message.content || !message.number) {
                 return;
             }
@@ -219,11 +218,16 @@ function analyze_message(message) {
                 error_alert(`user not found: ${message.number}`);
                 return;
             }
+            let temp = 0.9, pres = 1.0, freq = 1.0, model = client_1.Model.text;
+            if (user.model)
+                model = user.model;
+            if (user.temp)
+                temp = user.temp;
+            if (user.pres)
+                pres = user.pres;
+            if (user.freq)
+                freq = user.freq;
             const previous_messages = yield get_previous_messages(message, 8, false);
-            user.freq = freq_defualt;
-            user.pres = pres_default;
-            user.temp = temp_default;
-            user.model = model_default;
             console.log(`${log_time(message.response_time)} - user`);
             // checking for Reaction messages
             const reactions_array = Object.values(client_1.Reactions);
@@ -237,7 +241,8 @@ function analyze_message(message) {
                 console.log(`reactions: ${Date.now() - t0}ms`);
                 return;
             }
-            if (message.content.toLowerCase().startsWith('admin:') && admins.includes(user)) {
+            // admin messages
+            if (message.content.toLowerCase().startsWith('admin:') && admin_numbers.includes(message.number)) {
                 console.log(`${log_time(message.response_time)} - admin`);
                 yield send_message(Object.assign(Object.assign({}, default_message), { content: message.content.split(':').pop(), media_url: message.media_url, type: client_1.Type.question }), users);
                 return;
@@ -249,13 +254,27 @@ function analyze_message(message) {
                 console.log('admin question ' + JSON.stringify(admin_question));
                 return;
             }
+            else if (message.content.startsWith('m:') && admin_numbers.includes(message.number)) {
+                const modelText = message.content.trim().toLowerCase().split('m:').pop();
+                // Check if the modelText is a valid enum value
+                if (Object.values(client_1.Model).includes(modelText)) {
+                    const model = modelText;
+                    yield prisma.user.update({ where: { number: message.number }, data: { model } });
+                    yield send_message(Object.assign(Object.assign({}, default_response), { content: `${model} activated` }));
+                    return;
+                }
+                else {
+                    yield send_message(Object.assign(Object.assign({}, default_response), { content: `Invalid model. Valid models are: ${Object.values(client_1.Model).join(', ')}Respond with "m:*model*".` }));
+                    return;
+                }
+            }
             console.log(admin_question);
             yield log_message(message); // wait til after admin commands
             // categorize message
             const categories = Object.values(client_1.Type);
             const category_response = yield openai.createCompletion({
                 model: 'text-davinci-003', temperature: 0.3,
-                prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "customer_support" is ONLY for people asking specifically about how the service works. Examples:
+                prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "help" is only if the user has questions about the service. "customer_support" is ONLY for people asking specifically about how the service works. Examples:
       Text: I need help planning my day
       Category: discuss
       Text: what's my bio
@@ -282,27 +301,51 @@ function analyze_message(message) {
             }
             // specific functions
             if (category == client_1.Type.discuss) {
-                const previous_messages_string = previous_messages.map((message) => { var _a; return `\n[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}`; }).join('');
                 let init_prompt = fs_1.default.readFileSync('prompts/init_prompt.txt', 'utf8');
-                let openAIResponse = yield openai.createCompletion({
-                    model: 'text-davinci-003', temperature: temp, presence_penalty: pres, frequency_penalty: freq,
-                    prompt: `${init_prompt}
-        ${user.bio}
-        ###
-        ${previous_messages_string}
-        [${new Date().toLocaleString('en-US', message_date_format)}] Journal:`
-                });
-                if (!openAIResponse.data.choices[0].text) {
-                    error_alert('OpenAI Response was empty');
-                    return;
+                if (model == client_1.Model.text) {
+                    const previous_messages_string = previous_messages.map((message) => { var _a; return `\n[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}`; }).join('');
+                    init_prompt = `${init_prompt}\n${user.bio}\n###\n${previous_messages_string}\n[${new Date(message.date).toLocaleString('en-US', message_date_format)}] Human: ${message.content}\n[${new Date().toLocaleString('en-US', message_date_format)}] Journal:`;
+                    let openAIResponse = yield openai.createCompletion({
+                        model: 'text-davinci-003', temperature: temp, presence_penalty: pres, frequency_penalty: freq, max_tokens: 256,
+                        prompt: init_prompt
+                    });
+                    if (!openAIResponse.data.choices[0].text) {
+                        error_alert('OpenAI Response was empty');
+                        return;
+                    }
+                    console.log(`${log_time(message.response_time)} - prompt + openAIResponse.data.choices[0].text`);
+                    console.log(init_prompt + openAIResponse.data.choices[0].text);
+                    send_message(Object.assign(Object.assign({}, default_response), { content: openAIResponse.data.choices[0].text, response_time: message.response_time }));
                 }
-                console.log(`${log_time(message.response_time)} - prompt + openAIResponse.data.choices[0].text`);
-                console.log(prompt + openAIResponse.data.choices[0].text);
-                send_message(Object.assign(Object.assign({}, response_message), { content: openAIResponse.data.choices[0].text, response_time: message.response_time }));
+                if (model == client_1.Model.chat) {
+                    let init_prompt = fs_1.default.readFileSync('prompts/init_prompt_2.txt', 'utf8');
+                    // get messages user reacted to with love or emphasize
+                    const reacted_messages = yield prisma.message.findMany({ where: { number: message.number, reactions: { hasSome: [client_1.Reactions.Loved, client_1.Reactions.Emphasized] } }, orderBy: { date: "desc" }, take: 5 });
+                    // get messages preceding reacted messages
+                    const reacted_messages_prompts = yield Promise.all(reacted_messages.map((message) => __awaiter(this, void 0, void 0, function* () {
+                        try {
+                            return yield prisma.message.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } });
+                        }
+                        catch (e) {
+                            return message;
+                        }
+                    })));
+                    // combine prompts and messages
+                    let reacted_messages_with_prompts = reacted_messages_prompts.flatMap((value, index) => [value, reacted_messages[index]]);
+                    const reacted_messages_formatted = reacted_messages_with_prompts.map((message) => { return { role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user', content: `[${message.date.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
+                    const previous_messages_array = previous_messages.map((message) => { var _a; return { role: message.is_outbound ? "assistant" : "user", content: `[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
+                    let prompt = [{ role: 'system', content: init_prompt }];
+                    prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: message.content }]);
+                    const completion = yield openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, });
+                    let completion_string = completion.data.choices[0].message.content;
+                    if (completion_string.includes('M]'))
+                        completion_string = completion_string.split('M] ', 2).pop(); // remove date from completion
+                    yield send_message(Object.assign(Object.assign({}, default_response), { content: completion_string, tokens: message.tokens }));
+                }
             }
             else if (category == client_1.Type.update_profile) {
                 let openAIResponse = yield openai.createCompletion({
-                    model: 'text-davinci-003', temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0,
+                    model: 'text-davinci-003', temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0, max_tokens: 256,
                     prompt: `${fs_1.default.readFileSync('prompts/update_profile_prompt.txt', 'utf8')}
         current bio:${user.bio}
         current principles:${user.principles}
@@ -310,25 +353,25 @@ function analyze_message(message) {
         updated bio:`
                 });
                 const response = openAIResponse.data.choices[0].text.split(':');
-                yield send_message(Object.assign(Object.assign({}, response_message), { content: `${response[0].toLowerCase().replace(/\s/g, '') == 'view' ? 'your bio:' : 'updated bio:'}\n${response[1]}` }));
+                yield send_message(Object.assign(Object.assign({}, default_response), { content: `${response[0].toLowerCase().replace(/\s/g, '') == 'view' ? 'your bio:' : 'updated bio:'}\n${response[1]}` }));
                 yield prisma.user.update({ where: { number: message.number }, data: { bio: response[1] } });
             }
             else if (category == client_1.Type.help) {
                 let openAIResponse = yield openai.createCompletion({
-                    model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
+                    model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 256,
                     prompt: `${fs_1.default.readFileSync('prompts/help.txt', 'utf8')}
         Text: ${message.content}
         Response:`
                 });
                 const response = openAIResponse.data.choices[0].text;
-                yield send_message(Object.assign(Object.assign({}, response_message), { content: response ? response : 'Sorry bugged out. Try again' }));
+                yield send_message(Object.assign(Object.assign({}, default_response), { content: response ? response : 'Sorry bugged out. Try again' }));
             }
             else if (category == client_1.Type.quote) {
-                yield send_message(Object.assign(Object.assign({}, response_message), { content: (0, quotes_1.get_quote)() }));
+                yield send_message(Object.assign(Object.assign({}, default_response), { content: (0, quotes_1.get_quote)() }));
             }
             else if (category == client_1.Type.customer_support) {
-                send_message(Object.assign(Object.assign({}, response_message), { content: `Sorry for the inconvenience, somebody from the team will reach out.` }));
-                send_message(Object.assign(Object.assign({}, response_message), { content: ` ! Customer support request from (${user.number})\n${message.content}` }), admins);
+                send_message(Object.assign(Object.assign({}, default_response), { content: `Sorry for the inconvenience, somebody from the team will reach out.` }));
+                send_message(Object.assign(Object.assign({}, default_response), { content: ` ! Customer support request from (${user.number})\n${message.content}` }), admins);
             }
             else if (category == client_1.Type.advice) {
             }
@@ -357,17 +400,26 @@ function analyze_message(message) {
     });
 }
 const message_date_format = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
-function get_previous_messages(message, amount = 14, chat) {
+function get_previous_messages(message, amount, chat) {
     return __awaiter(this, void 0, void 0, function* () {
         // TODO not ideal cuz parses EVERY message from that number lol
         const resetMessage = yield prisma.message.findFirst({ where: { number: message.number, content: 'reset' }, orderBy: { id: 'desc' } });
         let resetMessageLoc;
         resetMessage === null ? resetMessageLoc = 0 : resetMessageLoc = resetMessage.id;
         let previous_messages = yield prisma.message.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount });
-        return previous_messages.reverse();
+        previous_messages = previous_messages.reverse();
+        if (chat) {
+            const previous_messages_chat = previous_messages.map((message) => { var _a; return { role: message.is_outbound ? "assistant" : "user", content: `[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
+            return previous_messages_chat;
+        }
+        else {
+            /* const previous_messages_string: string[] = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` })
+            return previous_messages_string as any */
+            return previous_messages;
+        }
     });
 }
-function send_message(message, users) {
+function send_message(message, users, testing = false) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             message.date = new Date(), message.is_outbound = true;
@@ -377,12 +429,14 @@ function send_message(message, users) {
             if (users) {
                 for (const user of users) {
                     sendblue.sendMessage({ content: message.content ? message.content : undefined, number: user.number, send_style: message.send_style ? message.send_style : undefined, media_url: message.media_url ? message.media_url : undefined, status_callback: sendblue_callback });
-                    log_message(message);
+                    if (!testing)
+                        log_message(Object.assign(Object.assign({}, message), { number: user.number }));
                 }
             }
             else {
                 sendblue.sendMessage({ content: message.content ? message.content : undefined, number: message.number, send_style: message.send_style ? message.send_style : undefined, media_url: message.media_url ? message.media_url : undefined, status_callback: sendblue_callback });
-                log_message(message);
+                if (!testing)
+                    log_message(message);
             }
             console.log(`${Date.now() - message.date.valueOf()}ms - send_message`);
         }
@@ -411,33 +465,11 @@ const test_message = Object.assign(Object.assign({}, default_message), { number:
 function test(message) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            if (!message)
-                return;
-            console.log(message.content.split(': ', 2)[0]);
-            console.log(message.content.split(': ', 2)[1]);
-            const start_date = chrono.parse(message.content.split(': ', 2).pop().split('@')[1])[0].start.date();
-            admin_question.push({ question: message.content.split(': ', 2).pop().split('@')[0], time: start_date });
-            admin_question.push({ question: 'klakakak', time: chrono.parse('6pm')[0].start.date() });
             // console.log('admin question ' + JSON.stringify(admin_question))
             // const chrono_output = chrono.parse('11:30pm')
             // console.log(chrono_output[0].start.date())
         }
         catch (e) { /* error_alert(e) */ }
-    });
-}
-function summarize(text) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const openAIResponse = yield openai.createCompletion({
-                model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0,
-                prompt: `${fs_1.default.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${text}\nResponse:`
-            });
-            const response = openAIResponse.data.choices[0].text;
-            return response;
-        }
-        catch (e) {
-            error_alert(e);
-        }
     });
 }
 /* async function update_table(){
@@ -447,4 +479,32 @@ function summarize(text) {
     const hour = row.date.getHours()
     await prisma.table.update({ where: { id: row.id }, data: new_row })
   })
-} */ 
+} */
+function create_image(message) {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        const t0 = Date.now();
+        if (!message.content) {
+            return;
+        }
+        // TODO replace with AI routing
+        let content_lc = message.content.toLowerCase(), image_prompt, image;
+        content_lc.startsWith('image of') ? image_prompt = (content_lc.split('image of ')[1]) : image_prompt = (content_lc.split('image ')[1]);
+        // TODO implement different styles
+        if (!image_prompt.includes('style')) {
+            image_prompt += ', photorealistic, detailed';
+        }
+        const response = yield openai.createImage({ prompt: image_prompt, n: 1, size: '1024x1024' });
+        image = response.data.data[0].url;
+        // TODO add collage capabilities https://cloudinary.com/documentation/image_collage_generation
+        let public_id = `${message.number.substring(1)}_${(_a = message.date) === null || _a === void 0 ? void 0 : _a.valueOf()}`;
+        try {
+            let data = yield cloudinary_1.v2.uploader.upload(image, { public_id: public_id, folder: '/robome', });
+            yield send_message(Object.assign(Object.assign({}, default_message), { number: message.number, media_url: `https://res.cloudinary.com/dpxdjc7qy/image/upload/q_80/v${data.version}/${data.public_id}.${data.format}` }));
+            console.log(`${Date.now() - t0}ms - create_image`);
+        }
+        catch (error) {
+            error_alert(error);
+        }
+    });
+}

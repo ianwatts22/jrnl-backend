@@ -7,8 +7,6 @@ Technology: Typescript Node.js app using Express and Axios, Sendblue API for tex
 Experience: Been developing web apps for a few months. Have done multiple projects with this stack.
 Principles: Simplicity, speed, ease of use, deep connection, privacy.
 
-###
-
 ## tech stack
 
 [chrono](https://github.com/wanasit/chrono): natural language date parser
