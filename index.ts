@@ -204,6 +204,9 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
       } else {
         await send_message({ ...default_response, content: `Invalid model. Valid models are: ${Object.values(Model).join(', ')}Respond with "m:*model*".` }); return
       }
+    } else if (message.content.toLowerCase().startsWith('image')) {
+      create_image(message)
+      console.log('create image')
     }
     console.log(admin_question)
 
@@ -407,7 +410,7 @@ async function test(message?: Prisma.MessageCreateInput) {
   })
 } */
 
-async function create_image(message: Message) {
+async function create_image(message: Prisma.MessageCreateInput) {
   const t0 = Date.now()
   if (!message.content) { return }
   // TODO replace with AI routing
@@ -425,7 +428,7 @@ async function create_image(message: Message) {
   try {
     let data: any = await cloudinary.uploader.upload(image, { public_id: public_id, folder: '/robome', })
 
-    await send_message({...default_message, number: message.number, media_url: `https://res.cloudinary.com/dpxdjc7qy/image/upload/q_80/v${data.version}/${data.public_id}.${data.format}` })
+    await send_message({ ...default_message, number: message.number, media_url: `https://res.cloudinary.com/dpxdjc7qy/image/upload/q_80/v${data.version}/${data.public_id}.${data.format}` })
 
     console.log(`${Date.now() - t0}ms - create_image`)
   } catch (error) { error_alert(error) }

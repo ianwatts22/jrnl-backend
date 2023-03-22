@@ -268,6 +268,10 @@ function analyze_message(message) {
                     return;
                 }
             }
+            else if (message.content.toLowerCase().startsWith('image')) {
+                create_image(message);
+                console.log('create image');
+            }
             console.log(admin_question);
             yield log_message(message); // wait til after admin commands
             // categorize message
