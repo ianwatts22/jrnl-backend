@@ -77,7 +77,7 @@ const default_message = {
 const default_user = {
     number: '', bio: '', timezone: client_1.Timezone.PST, principles: '',
     model: null, freq: null, pres: null, temp: null,
-    directive: ''
+    directive: '', prompt: null
 };
 function log_message(message) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -492,6 +492,7 @@ function create_image(message) {
             return;
         }
         // TODO replace with AI routing
+        // https://help.openai.com/en/articles/6582391-how-can-i-improve-my-prompts-with-dall-e
         let content_lc = message.content.toLowerCase(), image_prompt, image;
         content_lc.startsWith('image of') ? image_prompt = (content_lc.split('image of ')[1]) : image_prompt = (content_lc.split('image ')[1]);
         // TODO implement different styles

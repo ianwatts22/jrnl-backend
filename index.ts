@@ -41,7 +41,7 @@ const default_message: Prisma.MessageCreateInput = {
 const default_user: User = {
   number: '', bio: '', timezone: Timezone.PST, principles: '',
   model: null, freq: null, pres: null, temp: null,
-  directive: ''
+  directive: '', prompt: null
 }
 async function log_message(message: Prisma.MessageCreateInput) {
   if (message.content) message.content_letters = content_letters(message.content)
@@ -414,6 +414,7 @@ async function create_image(message: Prisma.MessageCreateInput) {
   const t0 = Date.now()
   if (!message.content) { return }
   // TODO replace with AI routing
+  // https://help.openai.com/en/articles/6582391-how-can-i-improve-my-prompts-with-dall-e
   let content_lc = message.content.toLowerCase(), image_prompt, image: string
   content_lc.startsWith('image of') ? image_prompt = (content_lc.split('image of ')[1]) : image_prompt = (content_lc.split('image ')[1])
 
