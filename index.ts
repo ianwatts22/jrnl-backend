@@ -107,8 +107,9 @@ timezone_adjusted.start()
 
 interface Question { question: string, time: Date }
 let admin_question: Question[] = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }]
-const admin_prompt = new cron.CronJob('0 * * * *', async () => {
-  console.log('every minute cron')
+const admin_prompt = new cron.CronJob('*/10 * * * *', async () => {
+  console.log('every hour cron')
+  local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
   admin_question.forEach(async question => {
     console.log('question time ' + (question.time.getHours()))
     console.log('current hour ' + (current_hour))
@@ -205,8 +206,7 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
         await send_message({ ...default_response, content: `Invalid model. Valid models are: ${Object.values(Model).join(', ')}Respond with "m:*model*".` }); return
       }
     } else if (message.content.toLowerCase().startsWith('image')) {
-      create_image(message)
-      console.log('create image')
+      create_image(message); return
     }
     console.log(admin_question)
 
@@ -415,6 +415,8 @@ async function create_image(message: Prisma.MessageCreateInput) {
   if (!message.content) { return }
   // TODO replace with AI routing
   // https://help.openai.com/en/articles/6582391-how-can-i-improve-my-prompts-with-dall-e
+  // additive prompting (using GPT to create prompts) [https://twitter.com/nickfloats/status/1635116672054079488?s=20]
+  // GPT-4 prompts for Midjourney (https://www.youtube.com/watch?v=Asg1e_IYzR8)
   let content_lc = message.content.toLowerCase(), image_prompt, image: string
   content_lc.startsWith('image of') ? image_prompt = (content_lc.split('image of ')[1]) : image_prompt = (content_lc.split('image ')[1])
 

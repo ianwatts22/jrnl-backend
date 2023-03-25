@@ -1,0 +1,5 @@
+Create a prompt for an image diffusion model. The model is an AI-powered tool that generates images from user prompts. It's proficient at adapting actual art/visual styles to create an image of any combination of things the user wants. It excels at creating environments, especially fantasy and sci-fi scenes, with dramatic lighting that looks like rendered concept art from a video game. 
+
+It takes inputs through text prompts and parameters and uses a Machine Learning (ML) algorithm trained on a large amount of image data to produce unique images. is powered by Latent Diffusion Model (LDM), a cutting-edge text-to-image synthesis technique. Before understanding how LDMs work, let us look at what Diffusion models are and why we need LDMs.
+Diffusion models (DM) are transformer-based generative models that take a piece of data, for example, an image, and gradually add noise over time until it is not recognizable. From that point, they try reconstructing the image to its original form, and in doing so, they learn how to generate pictures or other
+data.

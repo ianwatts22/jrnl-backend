@@ -151,8 +151,9 @@ const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaite
 }));
 timezone_adjusted.start();
 let admin_question = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }];
-const admin_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('every minute cron');
+const admin_prompt = new cron_1.default.CronJob('*/10 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('every hour cron');
+    local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
     admin_question.forEach((question) => __awaiter(void 0, void 0, void 0, function* () {
         console.log('question time ' + (question.time.getHours()));
         console.log('current hour ' + (current_hour));
@@ -270,7 +271,7 @@ function analyze_message(message) {
             }
             else if (message.content.toLowerCase().startsWith('image')) {
                 create_image(message);
-                console.log('create image');
+                return;
             }
             console.log(admin_question);
             yield log_message(message); // wait til after admin commands
@@ -493,6 +494,8 @@ function create_image(message) {
         }
         // TODO replace with AI routing
         // https://help.openai.com/en/articles/6582391-how-can-i-improve-my-prompts-with-dall-e
+        // additive prompting (using GPT to create prompts) [https://twitter.com/nickfloats/status/1635116672054079488?s=20]
+        // GPT-4 prompts for Midjourney (https://www.youtube.com/watch?v=Asg1e_IYzR8)
         let content_lc = message.content.toLowerCase(), image_prompt, image;
         content_lc.startsWith('image of') ? image_prompt = (content_lc.split('image of ')[1]) : image_prompt = (content_lc.split('image ')[1]);
         // TODO implement different styles
