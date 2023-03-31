@@ -49,6 +49,7 @@ const fs_1 = __importDefault(require("fs"));
 const chrono = __importStar(require("chrono-node"));
 const quotes_1 = require("./other_data/quotes");
 const cloudinary_1 = require("cloudinary");
+const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 const app = (0, express_1.default)(), sendblue = new sendblue_1.default(process.env.SENDBLUE_API_KEY, process.env.SENDBLUE_API_SECRET), configuration = new openai_1.Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, });
 const openai = new openai_1.OpenAIApi(configuration);
 let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com', local = false;
@@ -137,7 +138,6 @@ const sendblue_callback = `${link}/message-status`;
 // ======================================================================================
 const timezones = Object.values(client_1.Timezone);
 let current_hour;
-console.log(new Date().toUTCString());
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
 const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
@@ -147,7 +147,7 @@ const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaite
             yield send_message(Object.assign(Object.assign({}, default_message), { content: `What are three things you're grateful for?`, number: user.number }));
     }));
     console.log(`CRON current hour: ${current_hour}`);
-    yield send_message(Object.assign(Object.assign({}, default_message), { content: `current hour: ${current_hour}`, number: '+13104974985' }), undefined, true);
+    // await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
 }));
 timezone_adjusted.start();
 let admin_question = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }];
@@ -444,6 +444,16 @@ function send_message(message, users, testing = false) {
                     log_message(message);
             }
             console.log(`${Date.now() - message.date.valueOf()}ms - send_message`);
+            /* let response = await twilio.messages.create({
+              body: message.content,
+              mediaUrl: [message.media_url],
+              messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
+              to: message.number,
+              statusCallback: `${appURL}/twilio-status`,
+            })
+            // console.log(` ! Twilio full response: "${JSON.stringify(response.body)}"`)
+            console.log(` ! Twilio response (${response.to}): ${response.status} ${response.body} (${message.media_url})`)
+            return response */
         }
         catch (e) {
             error_alert(e);

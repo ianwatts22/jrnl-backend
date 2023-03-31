@@ -15,6 +15,8 @@ import { quotes, get_quote } from './other_data/quotes'
 import { send } from 'process'
 import { v2 as cloudinary } from 'cloudinary'
 
+const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN)
+
 const app = express(), sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!), configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
 const openai = new OpenAIApi(configuration)
 
@@ -93,7 +95,6 @@ const sendblue_callback = `${link}/message-status`
 
 const timezones = Object.values(Timezone)
 let current_hour: number
-console.log(new Date().toUTCString())
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
 const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
   users.forEach(async user => {
@@ -101,7 +102,7 @@ const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
     if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
   })
   console.log(`CRON current hour: ${current_hour}`)
-  await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
+  // await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
 })
 timezone_adjusted.start()
 
@@ -372,6 +373,17 @@ async function send_message(message: Prisma.MessageCreateInput, users?: User[], 
       if (!testing) log_message(message)
     }
     console.log(`${Date.now() - message.date.valueOf()}ms - send_message`)
+
+    /* let response = await twilio.messages.create({
+      body: message.content,
+      mediaUrl: [message.media_url],
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
+      to: message.number,
+      statusCallback: `${appURL}/twilio-status`,
+    })
+    // console.log(` ! Twilio full response: "${JSON.stringify(response.body)}"`)
+    console.log(` ! Twilio response (${response.to}): ${response.status} ${response.body} (${message.media_url})`)
+    return response */
   } catch (e) { error_alert(e) }
 }
 
