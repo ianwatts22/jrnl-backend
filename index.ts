@@ -15,7 +15,7 @@ import { quotes, get_quote } from './other_data/quotes'
 import { send } from 'process'
 import { v2 as cloudinary } from 'cloudinary'
 
-const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN)
+// const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN)
 
 const app = express(), sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!), configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
 const openai = new OpenAIApi(configuration)

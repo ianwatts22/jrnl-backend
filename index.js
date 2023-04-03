@@ -49,7 +49,7 @@ const fs_1 = __importDefault(require("fs"));
 const chrono = __importStar(require("chrono-node"));
 const quotes_1 = require("./other_data/quotes");
 const cloudinary_1 = require("cloudinary");
-const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+// const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN)
 const app = (0, express_1.default)(), sendblue = new sendblue_1.default(process.env.SENDBLUE_API_KEY, process.env.SENDBLUE_API_SECRET), configuration = new openai_1.Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, });
 const openai = new openai_1.OpenAIApi(configuration);
 let hostname = '0.0.0.0', link = 'https://jrnl.onrender.com', local = false;
