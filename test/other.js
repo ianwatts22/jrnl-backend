@@ -87,11 +87,22 @@ else if (message.content.startsWith('m:') && admins.includes(user)) {
       { role: 'user', content: message.content! },
     ]
     const previous_messages = await get_previous_messages(message, 20)
- 
+
     const completion = await openai.createChatCompletion({
       model: 'gpt-3.5-turbo', temperature: 0.3, max_tokens: 512, presence_penalty: 2.0, frequency_penalty: 2.0,
       messages: prompt.concat(previous_messages),
     }) */
+// ! TWILIO send_message
+/* let response = await twilio.messages.create({
+      body: message.content,
+      mediaUrl: [message.media_url],
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
+      to: message.number,
+      statusCallback: `${appURL}/twilio-status`,
+    })
+    // console.log(` ! Twilio full response: "${JSON.stringify(response.body)}"`)
+    console.log(` ! Twilio response (${response.to}): ${response.status} ${response.body} (${message.media_url})`)
+    return response */
 // ========================================================================================
 // ======================================EMBEDDINGS========================================
 // ========================================================================================

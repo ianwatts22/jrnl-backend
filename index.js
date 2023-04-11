@@ -141,6 +141,7 @@ let current_hour;
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
 const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
+        console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`);
         if ([21].includes(current_hour + timezones.indexOf(user.timezone)))
             yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number }));
         if ([8].includes(current_hour + timezones.indexOf(user.timezone)))
@@ -151,13 +152,13 @@ const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaite
 }));
 timezone_adjusted.start();
 let admin_question = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }];
-const admin_prompt = new cron_1.default.CronJob('*/10 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+const admin_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     console.log('every hour cron');
     local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
     admin_question.forEach((question) => __awaiter(void 0, void 0, void 0, function* () {
         console.log('question time ' + (question.time.getHours()));
         console.log('current hour ' + (current_hour));
-        if (question.time.getHours() == current_hour) {
+        if (question.time.toDateString() == new Date().toDateString() && question.time.getHours() == current_hour) {
             yield send_message(Object.assign(Object.assign({}, default_message), { content: question.question }), users);
         }
     }));
@@ -444,16 +445,6 @@ function send_message(message, users, testing = false) {
                     log_message(message);
             }
             console.log(`${Date.now() - message.date.valueOf()}ms - send_message`);
-            /* let response = await twilio.messages.create({
-              body: message.content,
-              mediaUrl: [message.media_url],
-              messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
-              to: message.number,
-              statusCallback: `${appURL}/twilio-status`,
-            })
-            // console.log(` ! Twilio full response: "${JSON.stringify(response.body)}"`)
-            console.log(` ! Twilio response (${response.to}): ${response.status} ${response.body} (${message.media_url})`)
-            return response */
         }
         catch (e) {
             error_alert(e);
