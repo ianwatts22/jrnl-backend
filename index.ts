@@ -66,7 +66,7 @@ app.post('/signup-form', async (req: express.Request, res: express.Response) => 
 
     await prisma.user.upsert({ where: { number: user.number }, update: user, create: user })
     if (!users.includes(user)) {
-      await send_message({ ...default_message, content: `Hi I'm jrnl, your conversational AI journal. We're trying to  Reply to my questions or text me when you want. I messsage every 3 hours throughout the day, Feel free to react to messages to better train me. Everything operates on natural language, so no need to learn any fancy commands. Your 'bio' provides me insight, helping me help you. Ask to view it or change it anytime. Remember, no special commands just speak as you would Add the contact card and pin me in your messages for quick access.`, number: user.number, media_url: contact_card, send_style: SendStyle.lasers, response_time: t0 })
+      await send_message({ ...default_message, content: `welcome to jrnl, I’ll ask you to take a photo of what you’re doing at a random time during the day. snap a pic, write a caption on what you’re doing or how you’re feeling - it’s up to you. if you want to answer my follow up questions feel free to. you can message me at any other time as well!`, number: user.number, media_url: contact_card, send_style: SendStyle.lasers, response_time: t0 })
       await sendblue.sendGroupMessage({ content: `NEW USER`, numbers: admin_numbers })
       users.push(user)
     }
@@ -125,7 +125,7 @@ admin_prompt.start()
 
 
 const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
-  const random_time = 6 + Math.floor(Math.random() * 14)
+  const random_time = 11 + Math.floor(Math.random() * 9)
   users.forEach(async (user: User) => {
     local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
     if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
