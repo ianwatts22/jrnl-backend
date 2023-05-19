@@ -141,11 +141,9 @@ let current_hour;
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
 const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
-        console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`);
-        if ([21].includes(current_hour + timezones.indexOf(user.timezone)))
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number }));
-        if ([8].includes(current_hour + timezones.indexOf(user.timezone)))
-            yield send_message(Object.assign(Object.assign({}, default_message), { content: `What are three things you're grateful for?`, number: user.number }));
+        // console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`)
+        // if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
+        // if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
     }));
     console.log(`CRON current hour: ${current_hour}`);
     // await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
@@ -164,6 +162,16 @@ const admin_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(voi
     }));
 }));
 admin_prompt.start();
+const mindfullness_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    const random_time = 6 + Math.floor(Math.random() * 14);
+    users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
+        local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
+        if (random_time == current_hour - timezones.indexOf(user.timezone)) {
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: `Mindfulness check. Take a pic of what you're doing rn and write what you're thinking.` }), users);
+        }
+    }));
+}));
+mindfullness_prompt.start();
 // every Sunday at 9pm local
 const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
@@ -182,7 +190,7 @@ const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(v
         yield send_message(Object.assign(Object.assign({}, default_message), { content: response, number: user.number, response_time: current_hour }));
     }));
 }));
-weekly_summary.start();
+// weekly_summary.start()
 let users;
 local_data();
 function local_data() {
@@ -308,6 +316,8 @@ function analyze_message(message) {
             // specific functions
             if (category == client_1.Type.discuss) {
                 let init_prompt = fs_1.default.readFileSync('prompts/init_prompt.txt', 'utf8');
+                if (user.number = '+13104974985')
+                    init_prompt = fs_1.default.readFileSync('prompts/init_prompt_Ian.txt', 'utf8');
                 if (model == client_1.Model.text) {
                     const previous_messages_string = previous_messages.map((message) => { var _a; return `\n[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}`; }).join('');
                     init_prompt = `${init_prompt}\n${user.bio}\n###\n${previous_messages_string}\n[${new Date(message.date).toLocaleString('en-US', message_date_format)}] Human: ${message.content}\n[${new Date().toLocaleString('en-US', message_date_format)}] Journal:`;

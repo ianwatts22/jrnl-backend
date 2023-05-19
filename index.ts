@@ -98,10 +98,10 @@ let current_hour: number
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
 const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
   users.forEach(async user => {
-    console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`)
-    
-    if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
-    if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
+    // console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`)
+
+    // if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
+    // if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
   })
   console.log(`CRON current hour: ${current_hour}`)
   // await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
@@ -123,24 +123,38 @@ const admin_prompt = new cron.CronJob('0 * * * *', async () => {
 })
 admin_prompt.start()
 
-// every Sunday at 9pm local
-const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
+
+const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
+  const random_time = 6 + Math.floor(Math.random() * 14)
   users.forEach(async (user: User) => {
-    const last_week_messages = await prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } })
-    if (last_week_messages.length < 5) send_message({ ...default_message, content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number })
-    if (21 == current_hour + timezones.indexOf(user.timezone!)) { }
-    let last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
-    // TODO add token max catch
-    last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string
-    const openAIResponse = await openai.createCompletion({
-      model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 512,
-      prompt: `${fs.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
-    })
-    const response = openAIResponse.data.choices[0].text
-    await send_message({ ...default_message, content: response, number: user.number, response_time: current_hour })
+    local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
+    if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
+      await send_message({ ...default_message, content: `Mindfulness check. Take a pic of what you're doing rn and write what you're thinking.` }, users)
+    }
   })
 })
-weekly_summary.start()
+mindfullness_prompt.start()
+
+// every Sunday at 9pm local
+const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
+    users.forEach(async (user: User) => {
+      const last_week_messages = await prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } })
+      if (last_week_messages.length < 5) send_message({ ...default_message, content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number })
+      if (21 == current_hour + timezones.indexOf(user.timezone!)) { }
+      let last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
+
+      // TODO add token max catch
+
+      last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string
+      const openAIResponse = await openai.createCompletion({
+        model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 512,
+        prompt: `${fs.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
+      })
+      const response = openAIResponse.data.choices[0].text
+      await send_message({ ...default_message, content: response, number: user.number, response_time: current_hour })
+    })
+  })
+// weekly_summary.start()
 
 let users: User[]
 local_data()
@@ -248,6 +262,7 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
     // specific functions
     if (category == Type.discuss) {
       let init_prompt = fs.readFileSync('prompts/init_prompt.txt', 'utf8')
+      if (user.number = '+13104974985') init_prompt = fs.readFileSync('prompts/init_prompt_Ian.txt', 'utf8')
       if (model == Model.text) {
         const previous_messages_string = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).join('')
 
