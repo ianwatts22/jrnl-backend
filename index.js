@@ -191,7 +191,7 @@ function test2() {
                 current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24;
             console.log(current_hour);
             if (17 == current_hour - timezones.indexOf(user.timezone)) {
-                yield send_message(Object.assign(Object.assign({}, default_message), { content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }), users);
+                yield send_message(Object.assign(Object.assign({}, default_message), { content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number }));
             }
         }));
     });
