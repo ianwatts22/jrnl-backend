@@ -193,7 +193,7 @@ function test2() {
         }));
     });
 }
-// test2()
+test2();
 const mindfullness_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     const random_time = 11 + Math.floor(Math.random() * 9);
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {

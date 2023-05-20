@@ -147,7 +147,7 @@ async function test2() {
     }
   })
 }
-// test2()
+test2()
 
 const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
   const random_time = 11 + Math.floor(Math.random() * 9)
