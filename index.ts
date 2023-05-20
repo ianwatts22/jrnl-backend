@@ -93,6 +93,19 @@ const sendblue_callback = `${link}/message-status`
 // ======================================CRON, CACHE=====================================
 // ======================================================================================
 
+let users: User[]
+local_data()
+admin_numbers = ['+13104974985', '+12015190240']
+async function local_data() {
+  try {
+    users = await prisma.user.findMany()
+    Watts = await prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = await prisma.user.findUnique({ where: { number: '+12015190240' } })
+    if (Watts && Pulice) admins = [Watts, Pulice]
+    console.log('START question time ' + (admin_question[0].time.getHours()))
+    console.log('START current hour ' + (current_hour))
+  } catch (e) { console.log(e) }
+}
+
 const timezones = Object.values(Timezone)
 let current_hour: number
 local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
@@ -123,13 +136,25 @@ const admin_prompt = new cron.CronJob('0 * * * *', async () => {
 })
 admin_prompt.start()
 
+async function test2() {
+  await local_data()
+  console.log("test2")
+  users.forEach(async (user: User) => {
+    local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
+    console.log(current_hour)
+    if (17 == current_hour - timezones.indexOf(user.timezone!)) {
+      await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
+    }
+  })
+}
+// test2()
 
 const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
   const random_time = 11 + Math.floor(Math.random() * 9)
   users.forEach(async (user: User) => {
     local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
     if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
-      await send_message({ ...default_message, content: `Mindfulness check. Take a pic of what you're doing rn and write what you're thinking.` }, users)
+      await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
     }
   })
 })
@@ -156,18 +181,6 @@ const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
   })
 // weekly_summary.start()
 
-let users: User[]
-local_data()
-async function local_data() {
-  try {
-    users = await prisma.user.findMany()
-    Watts = await prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = await prisma.user.findUnique({ where: { number: '+12015190240' } })
-    if (Watts && Pulice) admins = [Watts, Pulice], admin_numbers = admins.map(admin => admin.number)
-    console.log('START question time ' + (admin_question[0].time.getHours()))
-    console.log('START current hour ' + (current_hour))
-  } catch (e) { console.log(e) }
-}
-
 // ======================================================================================
 // ========================================FUNCTIONS=====================================
 // ======================================================================================
@@ -180,7 +193,7 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
     if (message.content.toLowerCase() === 'reset') { log_message({ ...message, type: Type.reset }); return }
     let user = await prisma.user.findFirst({ where: { number: message.number } })
     if (!user) { error_alert(`user not found: ${message.number}`); return }
-    let temp = 0.9, pres = 1.0, freq = 1.0, model: Model = Model.text
+    let temp = 0.9, pres = 1.0, freq = 1.0, model: Model = Model.chat
     if (user.model) model = user.model; if (user.temp) temp = user.temp; if (user.pres) pres = user.pres; if (user.freq) freq = user.freq
 
     const previous_messages = await get_previous_messages(message, 8, false)
