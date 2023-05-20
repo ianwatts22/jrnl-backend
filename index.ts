@@ -138,9 +138,11 @@ admin_prompt.start()
 
 async function test2() {
   await local_data()
+  console.log(current_hour)
   console.log("test2")
   users.forEach(async (user: User) => {
-    local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
+    current_hour = new Date().getHours()
+    if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
     console.log(current_hour)
     if (17 == current_hour - timezones.indexOf(user.timezone!)) {
       await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
@@ -152,7 +154,9 @@ test2()
 const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
   const random_time = 11 + Math.floor(Math.random() * 9)
   users.forEach(async (user: User) => {
-    local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
+    current_hour = new Date().getHours()
+    if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
+    // time is GMT, our T0 is PST
     if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
       await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
     }
