@@ -158,6 +158,7 @@ const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
     if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
     // time is GMT, our T0 is PST
     if (random_time == current_hour - timezones.indexOf(user.timezone!) || 21 == current_hour - timezones.indexOf(user.timezone!)) {
+      console.log(`mindfulness prompt: ${user.number}, ${user.timezone}, timezone index: ${timezones.indexOf(user.timezone)}, current hour: ${current_hour}`)
       await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
     }
   })
