@@ -247,10 +247,11 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
     await log_message(message)    // wait til after admin commands
 
     // categorize message
-    const categories: string[] = Object.values(Type)
+    // const categories: string[] = Object.values(Type)
+    const categories = ['discuss', 'help', 'customer_support', 'quote', 'update_profile']
     const category_response = await openai.createCompletion({
       model: 'text-davinci-003', temperature: 0.3,
-      prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "help" is only if the user has questions about the service. "customer_support" is ONLY for people asking specifically about how the service works. Examples:
+      prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "help" is only if the user has questions about the service. "customer_support" is ONLY for people asking specifically about how the service works. Unless clear otherwise, the category should be "discuss". Examples:
       Text: I need help planning my day
       Category: discuss
       Text: what's my bio
