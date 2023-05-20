@@ -145,7 +145,7 @@ async function test2() {
     if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
     console.log(current_hour)
     if (17 == current_hour - timezones.indexOf(user.timezone!)) {
-      await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
+      await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number } )
     }
   })
 }
