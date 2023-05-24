@@ -146,8 +146,6 @@ function local_data() {
             Watts = yield prisma.user.findUnique({ where: { number: '+13104974985' } }), Pulice = yield prisma.user.findUnique({ where: { number: '+12015190240' } });
             if (Watts && Pulice)
                 admins = [Watts, Pulice];
-            console.log('START question time ' + (admin_question[0].time.getHours()));
-            console.log('START current hour ' + (current_hour));
         }
         catch (e) {
             console.log(e);
@@ -169,10 +167,8 @@ const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaite
 timezone_adjusted.start();
 let admin_question = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }];
 const admin_prompt = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('every hour cron');
     local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7; // time is GMT, our T0 is PST
     admin_question.forEach((question) => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('question time ' + (question.time.getHours()));
         console.log('current hour ' + (current_hour));
         if (question.time.toDateString() == new Date().toDateString() && question.time.getHours() == current_hour) {
             yield send_message(Object.assign(Object.assign({}, default_message), { content: question.question }), users);
@@ -204,7 +200,7 @@ const mindfullness_prompt = new cron_1.default.CronJob('0 * * * *', () => __awai
         if (!local)
             current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24;
         // time is GMT, our T0 is PST
-        if (random_time == current_hour - timezones.indexOf(user.timezone) || 21 == current_hour - timezones.indexOf(user.timezone)) {
+        if (random_time == current_hour - timezones.indexOf(user.timezone)) {
             console.log(`mindfulness prompt: ${user.number}, ${user.timezone}, timezone index: ${timezones.indexOf(user.timezone)}, current hour: ${current_hour}`);
             yield send_message(Object.assign(Object.assign({}, default_message), { content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }), users);
         }
@@ -338,7 +334,7 @@ function analyze_message(message) {
             }
             // specific functions
             if (category == client_1.Type.discuss) {
-                let init_prompt = fs_1.default.readFileSync('prompts/init_prompt.txt', 'utf8');
+                let init_prompt = fs_1.default.readFileSync('prompts/init_prompt_chat.txt', 'utf8');
                 if (user.number = '+13104974985')
                     init_prompt = fs_1.default.readFileSync('prompts/init_prompt_Ian.txt', 'utf8');
                 if (model == client_1.Model.text) {
@@ -357,7 +353,7 @@ function analyze_message(message) {
                     send_message(Object.assign(Object.assign({}, default_response), { content: openAIResponse.data.choices[0].text, response_time: message.response_time }));
                 }
                 if (model == client_1.Model.chat) {
-                    let init_prompt = fs_1.default.readFileSync('prompts/init_prompt_2.txt', 'utf8');
+                    let init_prompt = fs_1.default.readFileSync('prompts/init_prompt_chat.txt', 'utf8');
                     // get messages user reacted to with love or emphasize
                     const reacted_messages = yield prisma.message.findMany({ where: { number: message.number, reactions: { hasSome: [client_1.Reactions.Loved, client_1.Reactions.Emphasized] } }, orderBy: { date: "desc" }, take: 5 });
                     // get messages preceding reacted messages

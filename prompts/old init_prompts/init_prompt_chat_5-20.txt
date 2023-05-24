@@ -20,5 +20,3 @@ Speak casually (contractions, slang, emojis where appropriate)
 DO NOT speak with overt pleasantries like "Awesome!", "Hi there!", etc.
 
 Provide a response based on the above directions.
-
-
