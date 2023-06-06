@@ -132,25 +132,9 @@ const admin_prompt = new cron.CronJob('0 * * * *', async () => {
 })
 admin_prompt.start()
 
-async function test2() {
-  await local_data()
-  console.log(current_hour)
-  console.log("test2")
-  users.forEach(async (user: User) => {
-    current_hour = new Date().getHours()
-    if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
-    console.log(current_hour)
-    if (17 == current_hour - timezones.indexOf(user.timezone!)) {
-      await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number } )
-    }
-  })
-}
-test2()
-
 const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
-  const random_time = 11 + Math.floor(Math.random() * 9)
   users.forEach(async (user: User) => {
-    current_hour = new Date().getHours()
+    let current_hour = new Date().getHours()
     if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
     // time is GMT, our T0 is PST
     if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
@@ -159,7 +143,13 @@ const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
     }
   })
 })
-mindfullness_prompt.start()
+let random_time = 11 + Math.floor(Math.random() * 9); // Generate random hour once per day
+const reset_random_time = new cron.CronJob('0 0 * * *', () => {
+  random_time = 11 + Math.floor(Math.random() * 9);
+})
+mindfullness_prompt.start();
+reset_random_time.start();
+
 
 // every Sunday at 9pm local
 const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
@@ -395,10 +385,12 @@ async function send_message(message: Prisma.MessageCreateInput, users?: User[], 
     message.date = new Date(), message.is_outbound = true
     if (message.response_time) message.response_time = Number(message.date.valueOf() - message.response_time) / 1000
     console.log(message.response_time)
+    console.log(users)
     if (users) {
       for (const user of users) {
         sendblue.sendMessage({ content: message.content ? message.content : undefined, number: user.number, send_style: message.send_style ? message.send_style : undefined, media_url: message.media_url ? message.media_url : undefined, status_callback: sendblue_callback })
         if (!testing) log_message({ ...message, number: user.number })
+        console.log(`message sent to ${user.number}`)
       }
     } else {
       sendblue.sendMessage({ content: message.content ? message.content : undefined, number: message.number, send_style: message.send_style ? message.send_style : undefined, media_url: message.media_url ? message.media_url : undefined, status_callback: sendblue_callback })
@@ -426,12 +418,16 @@ const log_time = (time: number) => `${((new Date().valueOf() - time) / 1000).toF
 // ======================================================================================
 
 const test_message: Prisma.MessageCreateInput = { ...default_message, number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' }
-// test(test_message)
+const test_message_users: Prisma.MessageCreateInput = { ...default_message, content: 'question: What difficult thing are you going to do today? @10am' }
+test(test_message)
 async function test(message?: Prisma.MessageCreateInput) {
   try {
     // console.log('admin question ' + JSON.stringify(admin_question))
     // const chrono_output = chrono.parse('11:30pm')
     // console.log(chrono_output[0].start.date())
+    await local_data()
+    await send_message(test_message, users)
+    console.log('sent message')
   } catch (e) { /* error_alert(e) */ }
 }
 
