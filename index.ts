@@ -113,18 +113,39 @@ const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
 
     // if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
     // if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
+    if ([mindfullness_time].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number })
   })
-  console.log(`CRON current hour: ${current_hour}`)
+  // console.log(`CRON current hour: ${current_hour}`)
   // await send_message({ ...default_message, content: `current hour: ${current_hour}`, number: '+13104974985' }, undefined, true)
 })
 timezone_adjusted.start()
 
+const hourly = new cron.CronJob('0 * * * *', async () => {
+  users.forEach(async user => {
+    if (9 > (current_hour + timezones.indexOf(user.timezone!)) || 21 < (current_hour + timezones.indexOf(user.timezone!))) return
+    
+    const lastMessage = await prisma.message.findFirst({
+      where: { number: user.number, date: { gte: new Date(Date.now() - 60*60*1000) } },
+      orderBy: { date: 'desc' }
+    })
+
+    if (!lastMessage) await analyze_message({ ...default_message, content: `[no response. help the user take action.]`, number: user.number }, Type.follow_up)
+  })
+})
+hourly.start()
+
+let mindfullness_time = 11 + Math.floor(Math.random() * 9); // Generate random hour once per day
+const reset_random_times = new cron.CronJob('0 0 * * *', () => {
+  mindfullness_time = 11 + Math.floor(Math.random() * 9);
+})
+reset_random_times.start();
+
+// QUESTIONS
 interface Question { question: string, time: Date }
 let admin_question: Question[] = [{ question: "what is something you’re afraid of doing, but believe you need to do? ", time: new Date('2023-03-22T02:00:00.000Z') }]
 const admin_prompt = new cron.CronJob('0 * * * *', async () => {
   local ? current_hour = new Date().getHours() : current_hour = new Date().getHours() - 7 // time is GMT, our T0 is PST
   admin_question.forEach(async question => {
-    console.log('current hour ' + (current_hour))
     if (question.time.toDateString() == new Date().toDateString() && question.time.getHours() == current_hour) {
       await send_message({ ...default_message, content: question.question, /* number: '+13104974985'  */ }, users)
     }
@@ -132,51 +153,45 @@ const admin_prompt = new cron.CronJob('0 * * * *', async () => {
 })
 admin_prompt.start()
 
-const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
+/* const mindfullness_prompt = new cron.CronJob('0 * * * *', async () => {
   users.forEach(async (user: User) => {
     let current_hour = new Date().getHours()
     if (!local) current_hour > 7 ? current_hour = new Date().getHours() - 7 : current_hour = new Date().getHours() - 7 + 24
     // time is GMT, our T0 is PST
-    if (random_time == current_hour - timezones.indexOf(user.timezone!)) {
+    if (mindfullness_time == current_hour - timezones.indexOf(user.timezone!)) {
       console.log(`mindfulness prompt: ${user.number}, ${user.timezone}, timezone index: ${timezones.indexOf(user.timezone)}, current hour: ${current_hour}`)
       await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.` }, users)
     }
   })
-})
-let random_time = 11 + Math.floor(Math.random() * 9); // Generate random hour once per day
-const reset_random_time = new cron.CronJob('0 0 * * *', () => {
-  random_time = 11 + Math.floor(Math.random() * 9);
-})
-mindfullness_prompt.start();
-reset_random_time.start();
+}) */
 
 
 // every Sunday at 9pm local
 const weekly_summary = new cron.CronJob('0 * * * 0', async () => {
-    users.forEach(async (user: User) => {
-      const last_week_messages = await prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } })
-      if (last_week_messages.length < 5) send_message({ ...default_message, content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number })
-      if (21 == current_hour + timezones.indexOf(user.timezone!)) { }
-      let last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
+  users.forEach(async (user: User) => {
+    const last_week_messages = await prisma.message.findMany({ where: { number: user.number, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), }, }, orderBy: { date: 'asc', } })
+    if (last_week_messages.length < 5) send_message({ ...default_message, content: `Send more than 5 messages/week to get a weekly summary.`, number: user.number })
+    if (21 == current_hour + timezones.indexOf(user.timezone!)) { }
+    let last_week_messages_string = last_week_messages.map((message: Message) => { return `\n${message.is_outbound ? 'Journal:' : 'Human:'} ${message.content}` }).join('')
 
-      // TODO add token max catch
+    // TODO add token max catch
 
-      last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string
-      const openAIResponse = await openai.createCompletion({
-        model: 'text-davinci-003', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 512,
-        prompt: `${fs.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
-      })
-      const response = openAIResponse.data.choices[0].text
-      await send_message({ ...default_message, content: response, number: user.number, response_time: current_hour })
+    last_week_messages_string.split('').length * 3 / 4 > 2048 ? last_week_messages_string = last_week_messages_string.slice(0, 2048 * 3 / 4) : last_week_messages_string
+    const openAIResponse = await openai.createCompletion({
+      model: 'gpt-4', temperature: 0.9, presence_penalty: 1.0, frequency_penalty: 1.0, max_tokens: 512,
+      prompt: `${fs.readFileSync('prompts/summarize.txt', 'utf8')}\nEntries: ${last_week_messages_string}\nResponse:`
     })
+    const response = openAIResponse.data.choices[0].text
+    await send_message({ ...default_message, content: response, number: user.number, response_time: current_hour })
   })
+})
 // weekly_summary.start()
 
 // ======================================================================================
 // ========================================FUNCTIONS=====================================
 // ======================================================================================
 
-async function analyze_message(message: Prisma.MessageCreateInput) {
+async function analyze_message(message: Prisma.MessageCreateInput, assigned_category?: Type) {
   try {
     const t0 = Date.now()
     const default_response: Prisma.MessageCreateInput = { ...default_message, number: message.number }
@@ -213,32 +228,20 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
       admin_question.push({ question: message.content.split(': ', 2).pop()!.split('@')[0], time: start_date })
       console.log('admin question ' + JSON.stringify(admin_question))
       return
-    } else if (message.content.startsWith('m:') && admin_numbers.includes(message.number)) {
-      const modelText = message.content.trim().toLowerCase().split('m:').pop()
-
-      // Check if the modelText is a valid enum value
-      if (Object.values(Model).includes(modelText as Model)) {
-        const model = modelText as Model;
-
-        await prisma.user.update({ where: { number: message.number }, data: { model } });
-        await send_message({ ...default_response, content: `${model} activated` });
-        return;
-      } else {
-        await send_message({ ...default_response, content: `Invalid model. Valid models are: ${Object.values(Model).join(', ')}Respond with "m:*model*".` }); return
-      }
     } else if (message.content.toLowerCase().startsWith('image')) {
       create_image(message); return
     }
     console.log(admin_question)
 
-    await log_message(message)    // wait til after admin commands
+    // ========================CATEGORIZE========================================================================
 
-    // categorize message
-    // const categories: string[] = Object.values(Type)
-    const categories = ['discuss', 'help', 'customer_support', 'quote', 'update_profile']
-    const category_response = await openai.createCompletion({
-      model: 'text-davinci-003', temperature: 0.3,
-      prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "help" is only if the user has questions about the service. "customer_support" is ONLY for people asking specifically about how the service works. Unless clear otherwise, the category should be "discuss". Examples:
+    let category: string
+    if (!assigned_category) {
+      // const categories: string[] = Object.values(Type)
+      const categories = ['discuss', 'help', 'customer_support', 'quote', 'update_profile']
+      const category_response = await openai.createCompletion({
+        model: 'text-davinci-003', temperature: 0.3,
+        prompt: `You are part of an AI journaling chatbot. To determine which function to run next, categorize the users intent into one of the following: ${categories}. "help" is only if the user has questions about the service. "customer_support" is ONLY for people asking specifically about how the service works. Unless clear otherwise, the category should be "discuss". Examples:
       Text: I need help planning my day
       Category: discuss
       Text: what's my bio
@@ -255,61 +258,59 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
       ###
       Text: ${message.content}
       Category:`
-    })
-    const category = category_response.data.choices[0].text!.toLowerCase().replace(/\s/g, '')
-    console.log(`${log_time(message.response_time)} - category == ${category}`)
-    if (!category || !categories.includes(category!)) {
-      error_alert(` ! miscategorization (${message.number}): '${message.content}'\ncategory: ${category}`)
-      await send_message({ ...default_message, content: `Sorry bugged out, try again`, number: message.number, })
-      return
+      })
+      category = category_response.data.choices[0].text!.toLowerCase().replace(/\s/g, '')
+      console.log(`${log_time(message.response_time)} - category == ${category}`)
+      if (!category || !categories.includes(category!)) {
+        error_alert(` ! miscategorization (${message.number}): '${message.content}'\ncategory: ${category}`)
+        await send_message({ ...default_message, content: `Sorry bugged out, try again`, number: message.number, })
+        return
+      }
+
+      await log_message(message)    // wait til after admin commands
+    } else {
+      category = assigned_category
     }
+    console.log(category)
 
-    // specific functions
-    if (category == Type.discuss) {
-      let init_prompt = fs.readFileSync('prompts/init_prompt_chat.txt', 'utf8')
-      if (user.number = '+13104974985') init_prompt = fs.readFileSync('prompts/init_prompt_Ian.txt', 'utf8')
-      if (model == Model.text) {
-        const previous_messages_string = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).join('')
+    // ========================FUNCTIONS==========================================================================
+    if (category == Type.discuss || category == Type.follow_up) {
+      let init_prompt = fs.readFileSync('prompts/init_prompt.txt', 'utf8')
 
-        init_prompt = `${init_prompt}\n${user!.bio}\n###\n${previous_messages_string}\n[${new Date(message.date).toLocaleString('en-US', message_date_format)}] Human: ${message.content}\n[${new Date().toLocaleString('en-US', message_date_format)}] Journal:`
-        let openAIResponse = await openai.createCompletion({
-          model: 'text-davinci-003', temperature: temp, presence_penalty: pres, frequency_penalty: freq, max_tokens: 256,
-          prompt: init_prompt
-        })
-        if (!openAIResponse.data.choices[0].text) { error_alert('OpenAI Response was empty'); return }
-        console.log(`${log_time(message.response_time)} - prompt + openAIResponse.data.choices[0].text`)
-        console.log(init_prompt + openAIResponse.data.choices[0].text)
-        send_message({ ...default_response, content: openAIResponse.data.choices[0].text, response_time: message.response_time })
-      }
+      // get messages user reacted to with love or emphasize
+      const reacted_messages = await prisma.message.findMany({ where: { number: message.number, reactions: { hasSome: [Reactions.Loved, Reactions.Emphasized] } }, orderBy: { date: "desc" }, take: 5 })
 
-      if (model == Model.chat) {
-        let init_prompt = fs.readFileSync('prompts/init_prompt_chat.txt', 'utf8')
-        // get messages user reacted to with love or emphasize
-        const reacted_messages = await prisma.message.findMany({ where: { number: message.number, reactions: { hasSome: [Reactions.Loved, Reactions.Emphasized] } }, orderBy: { date: "desc" }, take: 5 })
+      // get messages preceding reacted messages
+      const reacted_messages_prompts = await Promise.all(reacted_messages.map(async (message: Message) => {
+        try {
+          return await prisma.message.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } })
+        } catch (e) { return message }
+      }))
+      // combine prompts and messages
+      let reacted_messages_with_prompts = reacted_messages_prompts.flatMap((value, index) => [value, reacted_messages[index]])
 
-        // get messages preceding reacted messages
-        const reacted_messages_prompts = await Promise.all(reacted_messages.map(async (message: Message) => {
-          try {
-            return await prisma.message.findFirstOrThrow({ where: { number: message.number, id: message.id - 1 } })
-          } catch (e) { return message }
-        }))
-        // combine prompts and messages
-        let reacted_messages_with_prompts = reacted_messages_prompts.flatMap((value, index) => [value, reacted_messages[index]])
 
-        const reacted_messages_formatted: ChatCompletionRequestMessage[] = reacted_messages_with_prompts.map((message: Message) => { return { role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user', content: `[${message.date!.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
+      /* // TODO: make it into following format so it distinguishes them as separate message/prompt pairs
+      [message 1] fjfjfjfj
+      [response 1] fhjfjhadfsj
+       */
+      const reacted_messages_formatted: ChatCompletionRequestMessage[] = reacted_messages_with_prompts.map((message: Message) => { return { role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user', content: `[${message.date!.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
 
-        const previous_messages_array: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
+      let previous_messages_array: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
 
-        let prompt: ChatCompletionRequestMessage[] = [{ role: 'system', content: init_prompt }]
-        prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: message.content }])
+      /* if (category == Type.follow_up) {
+        previous_messages_array.push({ role: 'user', content: `[${new Date().toLocaleString("en-US", message_date_format)}] [no response. help the user take action.]` })
+      } */
 
-        const completion = await openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, })
-        let completion_string = completion.data.choices[0].message!.content
+      let prompt: ChatCompletionRequestMessage[] = [{ role: 'system', content: init_prompt }]
+      prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` }])
 
-        if (completion_string.includes('M]')) completion_string = completion_string.split('M] ', 2).pop()!  // remove date from completion
+      const completion = await openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, })
+      let completion_string = completion.data.choices[0].message!.content
 
-        await send_message({ ...default_response, content: completion_string, tokens: message.tokens })
-      }
+      if (completion_string.includes('M]')) completion_string = completion_string.split('M] ', 2).pop()!  // remove date from completion
+
+      await send_message({ ...default_response, content: completion_string, tokens: message.tokens })
     } else if (category == Type.update_profile) {
       let openAIResponse = await openai.createCompletion({
         model: 'text-davinci-003', temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0, max_tokens: 256,
@@ -339,22 +340,8 @@ async function analyze_message(message: Prisma.MessageCreateInput) {
       send_message({ ...default_response, content: ` ! Customer support request from (${user.number})\n${message.content}` }, admins)
     } else if (category == Type.advice) {
 
-    } else if (category == Type.model) {
-      /* let openAIResponse = await openai.createCompletion({
-        model: 'text-davinci-003', temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0,
-        prompt: `The user wants to modify their model and the weights of that model. The two possible models are "chat" and "text". The weights are "temperature", "frequency", and "presence". Adjust the values accordingly. Keep the order exactly the same.
-        Current: 
-        model: ${user.model}
-        temperature: ${user.temp}
-        frequency: ${user.freq}
-        presence: ${user.pres}
-        Message: ${message.content}\n
-        Updated:`
-      })
-      let response = openAIResponse.data.choices[0].text!.split('\n')
-      let response_values = response.map((line: string) => { return line.split(':') })
-      if (!response_values) { return }
-      let user_update = prisma.user.update({ where: { number: message.number! }, data: { model: response_values[0], temp: response_values[1], freq: response_values[2], pres: response_values[3] } }) */
+    } else if (category == Type.follow_up) {
+
     }
     console.log(`${log_time(message.response_time)} - analyze_message`)
   } catch (e) { error_alert(` ! analyze_message (${message.number}): ${e}`) }
@@ -370,14 +357,8 @@ async function get_previous_messages<T extends boolean>(message: Prisma.MessageC
   let previous_messages = await prisma.message.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount })
   previous_messages = previous_messages.reverse()
 
-  if (chat) {
-    const previous_messages_chat: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
-    return previous_messages_chat as any
-  } else {
-    /* const previous_messages_string: string[] = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` })
-    return previous_messages_string as any */
-    return previous_messages as any
-  }
+  const previous_messages_chat: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
+  return previous_messages_chat as any
 }
 
 async function send_message(message: Prisma.MessageCreateInput, users?: User[], testing: boolean = false) {
@@ -400,45 +381,6 @@ async function send_message(message: Prisma.MessageCreateInput, users?: User[], 
 
   } catch (e) { error_alert(e) }
 }
-
-// ======================================================================================
-// =====================================ADMIN STUFF======================================
-// ======================================================================================
-
-async function error_alert(error: any, message?: Message) {
-  await send_message({ ...default_message, content: `ERROR: ${error}`, number: '+13104974985' })
-  console.error(`ERROR: ${error}`)
-  if (message) await send_message({ ...default_message, content: `Sorry bugged out, try again.`, number: message.number })
-}
-
-const log_time = (time: number) => `${((new Date().valueOf() - time) / 1000).toFixed(1)}sec`
-
-// ======================================================================================
-// ========================================TESTING=======================================
-// ======================================================================================
-
-const test_message: Prisma.MessageCreateInput = { ...default_message, number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' }
-const test_message_users: Prisma.MessageCreateInput = { ...default_message, content: 'question: What difficult thing are you going to do today? @10am' }
-test(test_message)
-async function test(message?: Prisma.MessageCreateInput) {
-  try {
-    // console.log('admin question ' + JSON.stringify(admin_question))
-    // const chrono_output = chrono.parse('11:30pm')
-    // console.log(chrono_output[0].start.date())
-    await local_data()
-    await send_message(test_message, users)
-    console.log('sent message')
-  } catch (e) { /* error_alert(e) */ }
-}
-
-/* async function update_table(){
-  const table = await prisma.table.findMany()
-  console.log(table)
-  table.forEach(async (row) => {
-    const hour = row.date.getHours()
-    await prisma.table.update({ where: { id: row.id }, data: new_row })
-  })
-} */
 
 async function create_image(message: Prisma.MessageCreateInput) {
   const t0 = Date.now()
@@ -466,3 +408,52 @@ async function create_image(message: Prisma.MessageCreateInput) {
     console.log(`${Date.now() - t0}ms - create_image`)
   } catch (error) { error_alert(error) }
 }
+
+// ======================================================================================
+// =====================================ADMIN STUFF======================================
+// ======================================================================================
+
+async function error_alert(error: any, message?: Message) {
+  await send_message({ ...default_message, content: `ERROR: ${error}`, number: '+13104974985' })
+  console.error(`ERROR: ${error}`)
+  if (message) await send_message({ ...default_message, content: `Sorry bugged out, try again.`, number: message.number })
+}
+
+const log_time = (time: number) => `${((new Date().valueOf() - time) / 1000).toFixed(1)}sec`
+
+// ======================================================================================
+// ========================================TESTING=======================================
+// ======================================================================================
+
+const test_message: Prisma.MessageCreateInput = { ...default_message, number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' }
+const test_message_users: Prisma.MessageCreateInput = { ...default_message, content: 'question: What difficult thing are you going to do today? @10am' }
+test(test_message)
+async function test(message?: Prisma.MessageCreateInput) {
+  try {
+    // console.log('admin question ' + JSON.stringify(admin_question))
+    // const chrono_output = chrono.parse('11:30pm')
+    // console.log(chrono_output[0].start.date())
+    await local_data()
+    // await send_message(test_message, users)
+    console.log(users)
+    users.forEach(async user => {
+      const lastMessage = await prisma.message.findFirst({
+        where: { number: user.number, date: { gte: new Date(Date.now() - 60*60*1000) } },
+        orderBy: { date: 'desc' }
+      });
+  
+      if (!lastMessage) await analyze_message({ ...default_message, content: `[no response. help the user take action.]`, number: user.number }, Type.follow_up)
+    })
+
+    console.log('test')
+  } catch (e) { /* error_alert(e) */ }
+}
+
+/* async function update_table(){
+  const table = await prisma.table.findMany()
+  console.log(table)
+  table.forEach(async (row) => {
+    const hour = row.date.getHours()
+    await prisma.table.update({ where: { id: row.id }, data: new_row })
+  })
+} */

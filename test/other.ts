@@ -1,4 +1,63 @@
+// ========================================================================================
+// =======================================TEXT=============================================
+// ========================================================================================
 
+// in get_previous_messages
+/* if (chat) {
+  const previous_messages_chat: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
+  return previous_messages_chat as any
+} else {
+  /* const previous_messages_string: string[] = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` })
+  return previous_messages_string as any */
+  return previous_messages as any
+} */
+
+/* else if (message.content.startsWith('m:') && admin_numbers.includes(message.number)) {
+  const modelText = message.content.trim().toLowerCase().split('m:').pop()
+
+  // Check if the modelText is a valid enum value
+  if (Object.values(Model).includes(modelText as Model)) {
+    const model = modelText as Model;
+
+    await prisma.user.update({ where: { number: message.number }, data: { model } });
+    await send_message({ ...default_response, content: `${model} activated` });
+    return;
+  } else {
+    await send_message({ ...default_response, content: `Invalid model. Valid models are: ${Object.values(Model).join(', ')}Respond with "m:*model*".` }); return
+  }
+}  */
+
+/* if (model == Model.text) {
+  const previous_messages_string = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` }).join('')
+
+  init_prompt = `${init_prompt}\n${user!.bio}\n###\n${previous_messages_string}\n[${new Date(message.date).toLocaleString('en-US', message_date_format)}] Human: ${message.content}\n[${new Date().toLocaleString('en-US', message_date_format)}] Journal:`
+  let openAIResponse = await openai.createCompletion({
+    model: 'text-davinci-003', temperature: temp, presence_penalty: pres, frequency_penalty: freq, max_tokens: 256,
+    prompt: init_prompt
+  })
+  if (!openAIResponse.data.choices[0].text) { error_alert('OpenAI Response was empty'); return }
+  console.log(`${log_time(message.response_time)} - prompt + openAIResponse.data.choices[0].text`)
+  console.log(init_prompt + openAIResponse.data.choices[0].text)
+  send_message({ ...default_response, content: openAIResponse.data.choices[0].text, response_time: message.response_time })
+} */
+
+/* else if (category == Type.model) {
+  let openAIResponse = await openai.createCompletion({
+    model: 'text-davinci-003', temperature: 0.3, presence_penalty: 2.0, frequency_penalty: 2.0,
+    prompt: `The user wants to modify their model and the weights of that model. The two possible models are "chat" and "text". The weights are "temperature", "frequency", and "presence". Adjust the values accordingly. Keep the order exactly the same.
+    Current: 
+    model: ${user.model}
+    temperature: ${user.temp}
+    frequency: ${user.freq}
+    presence: ${user.pres}
+    Message: ${message.content}\n
+    Updated:`
+  })
+  let response = openAIResponse.data.choices[0].text!.split('\n')
+  let response_values = response.map((line: string) => { return line.split(':') })
+  if (!response_values) { return }
+  let user_update = prisma.user.update({ where: { number: message.number! }, data: { model: response_values[0], temp: response_values[1], freq: response_values[2], pres: response_values[3] } })
+} */
 
 // ========================================================================================
 // =======================================CHAT=============================================

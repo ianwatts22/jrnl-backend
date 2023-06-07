@@ -59,6 +59,7 @@ enum Type {
   announcement
   question
   summary
+  follow_up
   help
   reset
   model
