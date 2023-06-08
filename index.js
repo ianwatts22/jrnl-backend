@@ -228,8 +228,8 @@ const weekly_summary = new cron_1.default.CronJob('0 * * * 0', () => __awaiter(v
 // ======================================================================================
 // ========================================FUNCTIONS=====================================
 // ======================================================================================
+const message_date_format = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
 function analyze_message(message, assigned_category) {
-    var _a;
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const t0 = Date.now();
@@ -346,16 +346,18 @@ function analyze_message(message, assigned_category) {
                 [response 1] fhjfjhadfsj
                  */
                 const reacted_messages_formatted = reacted_messages_with_prompts.map((message) => { return { role: 'system', name: message.is_outbound ? 'example_assistant' : 'example_user', content: `[${message.date.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
+                // get previous messages
                 let previous_messages_array = previous_messages.map((message) => { var _a; return { role: message.is_outbound ? "assistant" : "user", content: `[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
-                /* if (category == Type.follow_up) {
-                  previous_messages_array.push({ role: 'user', content: `[${new Date().toLocaleString("en-US", message_date_format)}] [no response. help the user take action.]` })
-                } */
+                console.log(message.date.toLocaleString("en-US", message_date_format));
                 let prompt = [{ role: 'system', content: init_prompt }];
-                prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: `[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString("en-US", message_date_format)}] ${message.content}` }]);
+                prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: `[${message.date.toLocaleString("en-US", message_date_format)}] ${message.content}` }]);
                 const completion = yield openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, });
                 let completion_string = completion.data.choices[0].message.content;
-                if (completion_string.includes('M]'))
-                    completion_string = completion_string.split('M] ', 2).pop(); // remove date from completion
+                console.log(prompt);
+                console.log(completion_string);
+                if (completion_string.includes('M]') || completion_string.includes('m]') || completion_string.includes('Z]') || completion_string.includes('] '))
+                    completion_string = completion_string.split('] ', 2).pop(); // remove date from completion
+                console.log(completion_string);
                 yield send_message(Object.assign(Object.assign({}, default_response), { content: completion_string, tokens: message.tokens }));
             }
             else if (category == client_1.Type.update_profile) {
@@ -390,8 +392,6 @@ function analyze_message(message, assigned_category) {
             }
             else if (category == client_1.Type.advice) {
             }
-            else if (category == client_1.Type.follow_up) {
-            }
             console.log(`${log_time(message.response_time)} - analyze_message`);
         }
         catch (e) {
@@ -399,7 +399,6 @@ function analyze_message(message, assigned_category) {
         }
     });
 }
-const message_date_format = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
 function get_previous_messages(message, amount, chat) {
     return __awaiter(this, void 0, void 0, function* () {
         // TODO not ideal cuz parses EVERY message from that number lol
@@ -408,8 +407,10 @@ function get_previous_messages(message, amount, chat) {
         resetMessage === null ? resetMessageLoc = 0 : resetMessageLoc = resetMessage.id;
         let previous_messages = yield prisma.message.findMany({ where: { number: message.number, id: { gt: resetMessageLoc } }, orderBy: { id: 'desc' }, take: amount });
         previous_messages = previous_messages.reverse();
-        const previous_messages_chat = previous_messages.map((message) => { var _a; return { role: message.is_outbound ? "assistant" : "user", content: `[${(_a = message.date) === null || _a === void 0 ? void 0 : _a.toLocaleString("en-US", message_date_format)}] ${message.content}` }; });
-        return previous_messages_chat;
+        return previous_messages;
+        /* const previous_messages_chat: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
+        console.log(`previous_messages_chat\n` + previous_messages_chat)
+        return previous_messages_chat as any */
     });
 }
 function send_message(message, users, testing = false) {

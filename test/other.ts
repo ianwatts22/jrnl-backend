@@ -7,8 +7,8 @@
   const previous_messages_chat: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
   return previous_messages_chat as any
 } else {
-  /* const previous_messages_string: string[] = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` })
-  return previous_messages_string as any */
+  const previous_messages_string: string[] = previous_messages.map((message: Message) => { return `\n[${message.date?.toLocaleString('en-US', message_date_format)}] ${message.is_outbound ? 'Journal:' : 'Human: '} ${message.content}` })
+  return previous_messages_string as any
   return previous_messages as any
 } */
 
