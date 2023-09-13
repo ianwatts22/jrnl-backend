@@ -158,7 +158,8 @@ local ? current_hour = new Date().getHours() : current_hour = new Date().getHour
 const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
         // console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`)
-        // if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
+        if ([21].includes(current_hour + timezones.indexOf(user.timezone)))
+            yield send_message(Object.assign(Object.assign({}, default_message), { content: (0, quotes_1.get_quote)(), number: user.number }));
         // if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
         if ([mindfullness_time].includes(current_hour + timezones.indexOf(user.timezone)))
             yield send_message(Object.assign(Object.assign({}, default_message), { content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number }));
@@ -168,6 +169,7 @@ const timezone_adjusted = new cron_1.default.CronJob('0 * * * *', () => __awaite
 }));
 timezone_adjusted.start();
 const hourly = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log(`CRON hourly`);
     users.forEach((user) => __awaiter(void 0, void 0, void 0, function* () {
         if (9 > (current_hour + timezones.indexOf(user.timezone)) || 21 < (current_hour + timezones.indexOf(user.timezone)))
             return;
@@ -176,10 +178,10 @@ const hourly = new cron_1.default.CronJob('0 * * * *', () => __awaiter(void 0, v
             orderBy: { date: 'desc' }
         });
         if (!lastMessage)
-            yield analyze_message(Object.assign(Object.assign({}, default_message), { content: `[no response. help the user take action.]`, number: user.number }), client_1.Type.follow_up);
+            yield analyze_message(Object.assign(Object.assign({}, default_message), { content: `[no response. check-in.]`, number: user.number }), client_1.Type.follow_up);
     }));
 }));
-hourly.start();
+// hourly.start()
 let mindfullness_time = 11 + Math.floor(Math.random() * 9); // Generate random hour once per day
 const reset_random_times = new cron_1.default.CronJob('0 0 * * *', () => {
     mindfullness_time = 11 + Math.floor(Math.random() * 9);
@@ -353,10 +355,11 @@ function analyze_message(message, assigned_category) {
                 prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: `[${message.date.toLocaleString("en-US", message_date_format)}] ${message.content}` }]);
                 const completion = yield openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, });
                 let completion_string = completion.data.choices[0].message.content;
-                console.log(prompt);
-                console.log(completion_string);
+                // console.log(prompt)
+                // console.log(completion_string)
                 if (completion_string.includes('M]') || completion_string.includes('m]') || completion_string.includes('Z]') || completion_string.includes('] '))
                     completion_string = completion_string.split('] ', 2).pop(); // remove date from completion
+                console.log("user" + message.content);
                 console.log(completion_string);
                 yield send_message(Object.assign(Object.assign({}, default_response), { content: completion_string, tokens: message.tokens }));
             }
@@ -489,7 +492,7 @@ const log_time = (time) => `${((new Date().valueOf() - time) / 1000).toFixed(1)}
 // ======================================================================================
 const test_message = Object.assign(Object.assign({}, default_message), { number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' });
 const test_message_users = Object.assign(Object.assign({}, default_message), { content: 'question: What difficult thing are you going to do today? @10am' });
-test(test_message);
+// test(test_message)
 function test(message) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -498,7 +501,7 @@ function test(message) {
             // console.log(chrono_output[0].start.date())
             yield local_data();
             // await send_message(test_message, users)
-            console.log(users);
+            // console.log(users)
             users.forEach((user) => __awaiter(this, void 0, void 0, function* () {
                 const lastMessage = yield prisma.message.findFirst({
                     where: { number: user.number, date: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
@@ -519,4 +522,166 @@ function test(message) {
     const hour = row.date.getHours()
     await prisma.table.update({ where: { id: row.id }, data: new_row })
   })
+} */
+// WHISPER
+/* interface File extends Blob {
+  readonly lastModified: number; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/lastModified)
+  readonly name: string; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/name)
+  readonly webkitRelativePath: string; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/webkitRelativePath)
+}
+
+declare var File: {
+  prototype: File;
+  new(fileBits: BlobPart[], fileName: string, options?: FilePropertyBag): File;
+}; */
+/*
+async function convertAudioFileToTranscription(url: string) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer'
+    });
+
+    const buffer = Buffer.from(response.data, 'binary');
+
+    // Create a custom File object using the Blob constructor
+    // const file = new Blob([buffer], { type: 'audio/m4a' });
+    // file.lastModified = Date.now();
+    // file.name = 'audio.m4a';
+    const file: File = new File(...new Blob([buffer], { type: 'audio/m4a' }), 'audio.m4a', { type: 'audio/m4a' });
+
+    const transcriptionResponse = await openai.createTranscription(
+      file, // Pass the custom File object instead of the Buffer.
+      'whisper-1',
+      undefined,
+      'json',
+      1,
+      'en'
+    );
+
+    console.log('Transcription:', transcriptionResponse);
+  } catch (error) {
+    console.error('Error converting audio file:', error);
+  }
+} */
+/* interface CustomFile extends Blob {
+  readonly lastModified: number;
+  readonly name: string;
+} */
+/* async function convertAudioFileToTranscription(url: string) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer'
+    });
+
+    const buffer = Buffer.from(response.data, 'binary');
+
+    const file: CustomFile = {
+      ...new Blob([buffer], { type: 'audio/m4a' }),
+      lastModified: Date.now(),
+      name: 'audio.m4a'
+    };
+
+    const transcriptionResponse = await openai.createTranscription(
+      file, // Pass the custom File object instead of the Buffer.
+      'whisper-1',
+      undefined,
+      'json',
+      1,
+      'en'
+    );
+
+    console.log('Transcription:', transcriptionResponse);
+  } catch (error) {
+    console.error('Error converting audio file:', error);
+  }
+}
+
+// Call the function with your audio file URL
+convertAudioFileToTranscription('https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento%20St%203.m4a'); */
+/* transcribe('https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento St 3.m4a')
+async function transcribe(audioUrl: string) {
+  // Handle audio
+  console.log(audioUrl);
+
+  const streamPipeline = promisify(pipeline);
+  const response = await fetch(audioUrl);
+  if (!response.ok) {
+    throw new Error(`unexpected response ${response.statusText}`);
+  }
+  const tempPath = './audioFile.m4a';
+  if (response.body) {
+    await pipeline(response.body, writer);
+  }
+  await streamPipeline(response.body, fs.createWriteStream(tempPath));
+  console.log('Download completed.');
+  const transcription = await service
+    .getTranscriptionModel('random')
+    .transcribe(fs.createReadStream(tempPath));
+
+  // Delete the temporary audio file.
+  fs.unlink(tempPath, (err) => {
+    if (err) {
+      console.error(`Error deleting file: ${err.message}`);
+    } else {
+      console.log('Temporary file deleted.');
+    }
+  });
+  console.log(transcription);
+} */
+/* async function transcribe() {
+  try {
+    const url = 'https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento St 3.m4a';
+    const outputPath = path.resolve(__dirname, 'audio.m4a');
+
+    // Download file from URL
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      responseType: 'stream',
+    });
+
+    // Write the file to the local system
+    const writer = fs.createWriteStream(outputPath);
+    response.data.pipe(writer);
+
+    // Wait for download to finish
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    // Now we can use this file with OpenAI's API
+    const fileStream = fs.createReadStream(outputPath);
+    console.log(fileStream)
+    
+    const blob = new Blob([await streamToBuffer(fileStream)], { type: 'audio/m4a' });
+    console.log(blob)
+    const file = new File([blob], 'audio.m4a');
+    console.log('lalala')
+    console.log(file)
+
+    // Transcribe
+    console.log('Transcribing...')
+    const trasnscription_response = await openai.createTranscription(
+      file, // The audio file to transcribe.
+      "whisper-1", // The model to use for transcription.
+      undefined, // The prompt to use for transcription.
+      'json', // The format of the transcription.
+      1, // Temperature
+      'en' // Language
+  )
+    console.log(trasnscription_response.data);
+
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
 } */ 

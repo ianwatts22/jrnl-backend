@@ -15,6 +15,18 @@ import { quotes, get_quote } from './other_data/quotes'
 import { send } from 'process'
 import { v2 as cloudinary } from 'cloudinary'
 
+// Whisper real
+import { promisify } from 'util'
+import { pipeline } from 'stream'
+
+// Whisper
+import axios from 'axios';
+import FormData from 'form-data'
+import path from 'path'
+import multer from 'multer'
+import { Buffer } from 'buffer'
+
+
 // const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN)
 
 const app = express(), sendblue = new Sendblue(process.env.SENDBLUE_API_KEY!, process.env.SENDBLUE_API_SECRET!), configuration = new Configuration({ organization: process.env.OPENAI_ORGANIZATION, apiKey: process.env.OPENAI_API_KEY, })
@@ -111,7 +123,7 @@ const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
   users.forEach(async user => {
     // console.log(`CRON quote: ${user.number}, ${user.timezone}, ${timezones.indexOf(user.timezone)} ${[21].includes(current_hour + timezones.indexOf(user.timezone))}`)
 
-    // if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
+    if ([21].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: get_quote(), number: user.number })
     // if ([8].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `What are three things you're grateful for?`, number: user.number })
     if ([mindfullness_time].includes(current_hour + timezones.indexOf(user.timezone!))) await send_message({ ...default_message, content: `mindfulness check. take a pic of what you're doing rn and write what you're thinking.`, number: user.number })
   })
@@ -121,18 +133,19 @@ const timezone_adjusted = new cron.CronJob('0 * * * *', async () => {
 timezone_adjusted.start()
 
 const hourly = new cron.CronJob('0 * * * *', async () => {
+  console.log(`CRON hourly`)
   users.forEach(async user => {
     if (9 > (current_hour + timezones.indexOf(user.timezone!)) || 21 < (current_hour + timezones.indexOf(user.timezone!))) return
-    
+
     const lastMessage = await prisma.message.findFirst({
-      where: { number: user.number, date: { gte: new Date(Date.now() - 60*60*1000) } },
+      where: { number: user.number, date: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
       orderBy: { date: 'desc' }
     })
 
-    if (!lastMessage) await analyze_message({ ...default_message, content: `[no response. help the user take action.]`, number: user.number }, Type.follow_up)
+    if (!lastMessage) await analyze_message({ ...default_message, content: `[no response. check-in.]`, number: user.number }, Type.follow_up)
   })
 })
-hourly.start()
+// hourly.start()
 
 let mindfullness_time = 11 + Math.floor(Math.random() * 9); // Generate random hour once per day
 const reset_random_times = new cron.CronJob('0 0 * * *', () => {
@@ -302,16 +315,17 @@ async function analyze_message(message: Prisma.MessageCreateInput, assigned_cate
       let previous_messages_array: ChatCompletionRequestMessage[] = previous_messages.map((message: Message) => { return { role: message.is_outbound ? "assistant" : "user", content: `[${message.date?.toLocaleString("en-US", message_date_format)}] ${message.content}` } })
 
       console.log(message.date.toLocaleString("en-US", message_date_format))
-      
+
       let prompt: ChatCompletionRequestMessage[] = [{ role: 'system', content: init_prompt }]
       prompt = prompt.concat(reacted_messages_formatted, previous_messages_array, [{ role: 'user', content: `[${message.date.toLocaleString("en-US", message_date_format)}] ${message.content}` }])
 
       const completion = await openai.createChatCompletion({ max_tokens: 256, model: 'gpt-4', temperature: temp, presence_penalty: pres, frequency_penalty: freq, messages: prompt, })
       let completion_string = completion.data.choices[0].message!.content
 
-      console.log(prompt)
-      console.log(completion_string)
-      if (completion_string.includes('M]')  || completion_string.includes('m]') || completion_string.includes('Z]') || completion_string.includes('] ') ) completion_string = completion_string.split('] ', 2).pop()!  // remove date from completion
+      // console.log(prompt)
+      // console.log(completion_string)
+      if (completion_string.includes('M]') || completion_string.includes('m]') || completion_string.includes('Z]') || completion_string.includes('] ')) completion_string = completion_string.split('] ', 2).pop()!  // remove date from completion
+      console.log("user" + message.content)
       console.log(completion_string)
 
       await send_message({ ...default_response, content: completion_string, tokens: message.tokens })
@@ -429,7 +443,7 @@ const log_time = (time: number) => `${((new Date().valueOf() - time) / 1000).toF
 
 const test_message: Prisma.MessageCreateInput = { ...default_message, number: '+13104974985', content: 'question: What difficult thing are you going to do today? @10am' }
 const test_message_users: Prisma.MessageCreateInput = { ...default_message, content: 'question: What difficult thing are you going to do today? @10am' }
-test(test_message)
+// test(test_message)
 async function test(message?: Prisma.MessageCreateInput) {
   try {
     // console.log('admin question ' + JSON.stringify(admin_question))
@@ -437,13 +451,13 @@ async function test(message?: Prisma.MessageCreateInput) {
     // console.log(chrono_output[0].start.date())
     await local_data()
     // await send_message(test_message, users)
-    console.log(users)
+    // console.log(users)
     users.forEach(async user => {
       const lastMessage = await prisma.message.findFirst({
-        where: { number: user.number, date: { gte: new Date(Date.now() - 60*60*1000) } },
+        where: { number: user.number, date: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
         orderBy: { date: 'desc' }
       });
-  
+
       if (!lastMessage) await analyze_message({ ...default_message, content: `[no response. help the user take action.]`, number: user.number }, Type.follow_up)
     })
 
@@ -458,4 +472,178 @@ async function test(message?: Prisma.MessageCreateInput) {
     const hour = row.date.getHours()
     await prisma.table.update({ where: { id: row.id }, data: new_row })
   })
+} */
+
+
+// WHISPER
+
+/* interface File extends Blob {
+  readonly lastModified: number; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/lastModified)
+  readonly name: string; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/name)
+  readonly webkitRelativePath: string; // [MDN Reference](https://developer.mozilla.org/docs/Web/API/File/webkitRelativePath)
+}
+
+declare var File: {
+  prototype: File;
+  new(fileBits: BlobPart[], fileName: string, options?: FilePropertyBag): File;
+}; */
+
+
+/* 
+async function convertAudioFileToTranscription(url: string) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer'
+    });
+
+    const buffer = Buffer.from(response.data, 'binary');
+
+    // Create a custom File object using the Blob constructor
+    // const file = new Blob([buffer], { type: 'audio/m4a' });
+    // file.lastModified = Date.now();
+    // file.name = 'audio.m4a';
+    const file: File = new File(...new Blob([buffer], { type: 'audio/m4a' }), 'audio.m4a', { type: 'audio/m4a' });
+
+    const transcriptionResponse = await openai.createTranscription(
+      file, // Pass the custom File object instead of the Buffer.
+      'whisper-1',
+      undefined,
+      'json',
+      1,
+      'en'
+    );
+
+    console.log('Transcription:', transcriptionResponse);
+  } catch (error) {
+    console.error('Error converting audio file:', error);
+  }
+} */
+
+
+/* interface CustomFile extends Blob {
+  readonly lastModified: number;
+  readonly name: string;
+} */
+
+/* async function convertAudioFileToTranscription(url: string) {
+  try {
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer'
+    });
+
+    const buffer = Buffer.from(response.data, 'binary');
+
+    const file: CustomFile = {
+      ...new Blob([buffer], { type: 'audio/m4a' }),
+      lastModified: Date.now(),
+      name: 'audio.m4a'
+    };
+
+    const transcriptionResponse = await openai.createTranscription(
+      file, // Pass the custom File object instead of the Buffer.
+      'whisper-1',
+      undefined,
+      'json',
+      1,
+      'en'
+    );
+
+    console.log('Transcription:', transcriptionResponse);
+  } catch (error) {
+    console.error('Error converting audio file:', error);
+  }
+}
+
+// Call the function with your audio file URL
+convertAudioFileToTranscription('https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento%20St%203.m4a'); */
+
+/* transcribe('https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento St 3.m4a')
+async function transcribe(audioUrl: string) {
+  // Handle audio
+  console.log(audioUrl);
+
+  const streamPipeline = promisify(pipeline);
+  const response = await fetch(audioUrl);
+  if (!response.ok) {
+    throw new Error(`unexpected response ${response.statusText}`);
+  }
+  const tempPath = './audioFile.m4a';
+  if (response.body) {
+    await pipeline(response.body, writer);
+  }
+  await streamPipeline(response.body, fs.createWriteStream(tempPath));
+  console.log('Download completed.');
+  const transcription = await service
+    .getTranscriptionModel('random')
+    .transcribe(fs.createReadStream(tempPath));
+
+  // Delete the temporary audio file.
+  fs.unlink(tempPath, (err) => {
+    if (err) {
+      console.error(`Error deleting file: ${err.message}`);
+    } else {
+      console.log('Temporary file deleted.');
+    }
+  });
+  console.log(transcription);
+} */
+
+
+
+/* async function transcribe() {
+  try {
+    const url = 'https://storage.googleapis.com/inbound-file-store/d7kVqNfG_Sacramento St 3.m4a';
+    const outputPath = path.resolve(__dirname, 'audio.m4a');
+
+    // Download file from URL
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      responseType: 'stream',
+    });
+
+    // Write the file to the local system
+    const writer = fs.createWriteStream(outputPath);
+    response.data.pipe(writer);
+
+    // Wait for download to finish
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    // Now we can use this file with OpenAI's API
+    const fileStream = fs.createReadStream(outputPath);
+    console.log(fileStream)
+    
+    const blob = new Blob([await streamToBuffer(fileStream)], { type: 'audio/m4a' });
+    console.log(blob)
+    const file = new File([blob], 'audio.m4a');
+    console.log('lalala')
+    console.log(file)
+
+    // Transcribe
+    console.log('Transcribing...')
+    const trasnscription_response = await openai.createTranscription(
+      file, // The audio file to transcribe.
+      "whisper-1", // The model to use for transcription.
+      undefined, // The prompt to use for transcription.
+      'json', // The format of the transcription.
+      1, // Temperature
+      'en' // Language
+  )
+    console.log(trasnscription_response.data);
+
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
 } */
