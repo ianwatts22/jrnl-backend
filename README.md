@@ -1,5 +1,11 @@
 # jrnl
 
+jrnl is an iMessage journaling chatbot for conversational journlaing in the messaging interface we use every day. The system prompt . It has the previous 20 messages as context, including the date and time for context. We are working on recursive summarization as well, to give provide context from earlier messages while minimizing token usage and irrelevant infomration.
+
+You can tapback on messages
+- messages you "Love" will be used in the example messages as lightweight RLHF, tailoring the responses towards messages you love.
+- when you question or emphasize, it will clarify or continue respectively
+
 ## ChatGPT prompt
 
 Project: iMessage journaling chatbot service called "jrnl". It is meant to make it easier for people to journal by providing a conversational interface.
