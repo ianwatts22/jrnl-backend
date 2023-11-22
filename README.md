@@ -1,6 +1,6 @@
 # jrnl
 
-jrnl is an iMessage journaling chatbot for conversational journlaing in the messaging interface we use every day. The system prompt . It has the previous 20 messages as context, including the date and time for context. We are working on recursive summarization as well, to give provide context from earlier messages while minimizing token usage and irrelevant infomration.
+jrnl is an iMessage journaling chatbot for conversational journlaing in the messaging interface we use every day. The system prompt includes a bio and other demographic information you enter in the signup form, which makes it speak in a relatable manner. It also includes some principles and directions to help you get ideas out of your head and break them down into achieveable actions you can take immediately. It has the previous 20 messages as context, including the date and time for context. We are working on recursive summarization as well, to give provide context from earlier messages while minimizing token usage and irrelevant infomration.
 
 You can tapback on messages
 - messages you "Love" will be used in the example messages as lightweight RLHF, tailoring the responses towards messages you love.
